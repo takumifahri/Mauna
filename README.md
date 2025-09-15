@@ -2,7 +2,7 @@
 
 Deskripsi singkat
 - Mauna adalah aplikasi pembelajaran bahasa isyarat dengan inferensi real-time dan modul latihan.
-
+```
 ==================================================
 | Path                 | Tujuan singkat
 --------------------------------------------------
@@ -20,6 +20,8 @@ Deskripsi singkat
 
 src (struktur sesuai folder Anda)
 --------------------------------------------------
+```
+```
 src
 │
 ├── app/
@@ -40,7 +42,7 @@ model/
 ├── output/                   # model outputs / artifacts — [model/output](model/output)
 └── test/                     # contoh/tes model — [model/test](model/test)
 --------------------------------------------------
-
+```
 Catatan:
 - Jika ada file / folder tambahan yang ingin dimasukkan ke README (mis. data/, notebooks/), beritahu saya agar saya tambahkan.
 1. Buat dan aktifkan virtual environment:
