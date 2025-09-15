@@ -3,26 +3,46 @@
 Deskripsi singkat
 - Mauna adalah aplikasi pembelajaran bahasa isyarat dengan inferensi real-time dan modul latihan.
 
+==================================================
 | Path                 | Tujuan singkat
 --------------------------------------------------
 | .venv/               | Virtual environment (jangan commit ke VCS)
-| data/                | Dataset mentah, anotasi, contoh (lihat data/README.md)
-| notebooks/           | Jupyter notebooks — eksperimen & analisis
-| src/                 | Kode sumber utama
-|   ├─ preprocessing.py| Pembersihan & augmentasi data
-|   ├─ dataset.py      | Pembuat dataset (PyTorch / TensorFlow)
-|   ├─ model.py        | Arsitektur model & utilitas
-|   ├─ train.py        | Skrip pelatihan
-|   ├─ infer.py        | Skrip inferensi (webcam / demo)
-|   └─ app/            | Backend / UI (FastAPI / Streamlit / Flask)
-| app/                 | Paket aplikasi / UI yang dibangun (opsional)
-| model/               | Model terlatih / checkpoints (gunakan subfolder bertimestamp)
+| data/                | Dataset mentah, anotasi, contoh (opsional)
+| notebooks/           | Jupyter notebooks — eksperimen & analisis (opsional)
+| src/                 | Kode sumber utama (rincian di bawah)
+| model/               | Model terlatih / checkpoints / artefak
 | output/              | Hasil pelatihan: logs, metrics, artifacts
 | tests/               | Unit & integration tests
-| requirements.txt     | Daftar dependensi (pip install -r requirements.txt)
-| Dockerfile           | Instruksi Docker untuk build image
-| .gitignore           | File / direktori yang diabaikan oleh Git
---------------------------------------------------ndows)
+| requirements.txt     | Daftar dependensi (pip install -r requirements.txt) — [requirements.txt](requirements.txt)
+| Dockerfile           | Instruksi Docker untuk build image — [Dockerfile](Dockerfile)
+| .gitignore           | File / direktori yang diabaikan oleh Git — [.gitignore](.gitignore)
+--------------------------------------------------
+
+src (struktur sesuai folder Anda)
+--------------------------------------------------
+src
+│
+├── app/
+│   └── main.py               # Entry point app / server — [src/app/main.py](src/app/main.py)
+│
+├── database/
+│   ├── connection.py         # Koneksi DB — [src/database/connection.py](src/database/connection.py)
+│   └── seed/                 # Seeder / data awal
+│
+├── handler/                  # Handler / service layer
+├── routes/                   # Routing API & grup route
+└── utils/                    # Utilitas: helper, validator, dll
+--------------------------------------------------
+
+model (yang ada di repo)
+--------------------------------------------------
+model/
+├── output/                   # model outputs / artifacts — [model/output](model/output)
+└── test/                     # contoh/tes model — [model/test](model/test)
+--------------------------------------------------
+
+Catatan:
+- Jika ada file / folder tambahan yang ingin dimasukkan ke README (mis. data/, notebooks/), beritahu saya agar saya tambahkan.
 1. Buat dan aktifkan virtual environment:
    python -m venv .venv
    .venv\Scripts\activate
