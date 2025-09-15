@@ -3,26 +3,26 @@
 Deskripsi singkat
 - Mauna adalah aplikasi pembelajaran bahasa isyarat dengan inferensi real-time dan modul latihan.
 
-Direktori yang disarankan (struktur & tujuan)
-- .venv/                — virtual environment (tidak dimasukkan ke VCS)
-- data/                 — dataset mentah, anotasi, dan contoh dataset
-- notebooks/            — eksperimen dan analisis Jupyter
-- src/                  — kode sumber aplikasi
-    - src/preprocessing.py   — pembersihan & augmentasi data
-    - src/dataset.py         — pembuat dataset (PyTorch/TensorFlow)
-    - src/model.py           — arsitektur model & utilitas
-    - src/train.py           — skrip pelatihan
-    - src/infer.py           — inferensi webcam / demo
-    - src/app/                — frontend (Streamlit / FastAPI / Flask)
-- app/                  — (opsional) paket aplikasi / UI yang dibangun
-- model/                — model terlatih / checkpoints
-- output/               — hasil pelatihan, log, dan metric
-- tests/                — tes unit
-- requirements.txt      — daftar dependensi ([requirements.txt](requirements.txt))
-- Dockerfile            — image dasar untuk pengemasan ([Dockerfile](Dockerfile))
-- .gitignore            — file/dir yang diabaikan ([.gitignore](.gitignore))
-
-Panduan singkat (Windows)
+| Path                 | Tujuan singkat
+--------------------------------------------------
+| .venv/               | Virtual environment (jangan commit ke VCS)
+| data/                | Dataset mentah, anotasi, contoh (lihat data/README.md)
+| notebooks/           | Jupyter notebooks — eksperimen & analisis
+| src/                 | Kode sumber utama
+|   ├─ preprocessing.py| Pembersihan & augmentasi data
+|   ├─ dataset.py      | Pembuat dataset (PyTorch / TensorFlow)
+|   ├─ model.py        | Arsitektur model & utilitas
+|   ├─ train.py        | Skrip pelatihan
+|   ├─ infer.py        | Skrip inferensi (webcam / demo)
+|   └─ app/            | Backend / UI (FastAPI / Streamlit / Flask)
+| app/                 | Paket aplikasi / UI yang dibangun (opsional)
+| model/               | Model terlatih / checkpoints (gunakan subfolder bertimestamp)
+| output/              | Hasil pelatihan: logs, metrics, artifacts
+| tests/               | Unit & integration tests
+| requirements.txt     | Daftar dependensi (pip install -r requirements.txt)
+| Dockerfile           | Instruksi Docker untuk build image
+| .gitignore           | File / direktori yang diabaikan oleh Git
+--------------------------------------------------ndows)
 1. Buat dan aktifkan virtual environment:
    python -m venv .venv
    .venv\Scripts\activate
