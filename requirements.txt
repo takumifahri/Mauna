@@ -1,0 +1,24 @@
+# Core Framework
+fastapi
+uvicorn
+
+# Database and ORM
+sqlalchemy==2.0.30
+alembic==1.13.1
+
+# Database Drivers (pilih salah satu)
+# psycopg2-binary  # untuk PostgreSQL
+# asyncpg # jika menggunakan async database driver untuk PostgreSQL
+
+# Authentication (JWT)
+python-jose[cryptography]
+passlib[bcrypt]
+
+# Machine Learning and Image Processing
+tensorflow
+opencv-python
+scikit-learn
+Pillow
+
+# Environment Variables Management
+python-dotenv
