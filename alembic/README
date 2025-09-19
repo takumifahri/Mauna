@@ -1,1 +1,56 @@
-Generic single-database configuration.
+# Alembic — Dokumentasi singkat untuk migrasi database
+
+Ringkasan  
+Folder alembic berisi konfigurasi dan skrip migrasi untuk schema database aplikasi. Gunakan Alembic untuk membuat, menerapkan, dan membatalkan perubahan schema yang didefinisikan lewat model SQLAlchemy.
+
+File penting
+- [alembic/env.py](alembic/env.py) — konfigurasi runtime Alembic; mengimpor metadata dari proyek (lihat [src/database/db.py](src/database/db.py)) dan model (mis. [src/models/user.py](src/models/user.py)).
+- [alembic/script.py.mako](alembic/script.py.mako) — template pembuatan skrip migrasi.
+- [alembic/versions/](alembic/versions/) — folder tempat file migrasi yang dihasilkan disimpan.
+
+Persyaratan
+- Pastikan environment variables ter-set (file .env di root):
+  - DATABASE_HOSTNAME, DATABASE_PORT, DATABASE_NAME, DATABASE_USERNAME, DATABASE_PASSWORD
+  - atau satu variabel DATABASE_URL / database_url yang digunakan di [src/database/db.py](src/database/db.py)
+- Jalankan perintah dari root project (direktori yang berisi folder `src/` dan `alembic/`).
+
+Quick start (perintah umum)
+- Buat revisi (otomatis dari model):
+  alembic revision --autogenerate -m "pesan perubahan"
+- Buat revisi kosong:
+  alembic revision -m "pesan"
+- Terapkan semua migrasi ke head:
+  alembic upgrade head
+- Terapkan satu langkah:
+  alembic upgrade +1
+- Mundurkan migrasi:
+  alembic downgrade -1
+- Mundurkan ke revisi tertentu:
+  alembic downgrade <revision_id>
+- Lihat status:
+  alembic current
+- Cetak SQL migrasi tanpa menjalankan (offline):
+  alembic upgrade head --sql
+
+Catatan penggunaan di proyek ini
+- env.py telah diset agar mengambil metadata dari `Base` di [src/database/db.py](src/database/db.py). Pastikan semua model yang ingin terdeteksi Alembic di-import di env.py agar `autogenerate` mengenali perubahan (contoh: [src/models/user.py](src/models/user.py) sudah di-import).
+- Jalankan perintah alembic dari root project agar path relatif di env.py berfungsi.
+- Jika menggunakan uvicorn / aplikasi, jangan jalankan server saat membuat migrasi jika ada perubahan model yang sedang diedit.
+
+Tips dan troubleshooting
+- Error "no module named src" atau import error: jalankan perintah migrasi dari root project dan pastikan Python path mengandung root (contoh: gunakan virtualenv aktif).
+- Perubahan model tidak terdeteksi oleh `--autogenerate`: pastikan model di-import di env.py dan metadata yang sama (Base.metadata) digunakan di definisi model.
+- Untuk deployment multi-environment, set `sqlalchemy.url` di file `alembic.ini` atau lewat environment variable yang digunakan di [src/database/db.py](src/database/db.py).
+
+Rekomendasi produksi
+- Simpan skrip migrasi di version control (sudah di folder versions/).
+- Review hasil `--autogenerate` sebelum commit — autogenerate bisa menghasilkan perubahan yang tidak diinginkan.
+- Jalankan migrasi di CI/CD pipeline atau langkah deployment terotomasi.
+
+Kontak singkat
+- Entry point aplikasi: [src/app/main.py](src/app/main.py)  
+- Database setup: [src/database/db.py](src/database/db.py)  
+- Jika perlu bantuan pembuatan migrasi yang kompatibel, jalankan:  
+  1) pastikan model ter-import di env.py  
+  2) alembic revision --autogenerate -m "msg"  
+  3) review -> alembic upgrade head
