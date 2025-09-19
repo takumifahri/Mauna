@@ -12,6 +12,8 @@ from src.database.db import db_config, Base
 
 # Import ALL your models here so Alembic can detect them
 from src.models.user import User, UserRole
+from src.models.badges import Badge, DificultyLevel  # TAMBAHKAN INI
+from src.models.user_badge import user_badge_association  # TAMBAHKAN INI
 
 # this is the Alembic Config object
 config = context.config

@@ -76,7 +76,6 @@ Catatan akhir
 - Fokus pada pengalaman pembelajaran interaktif dan kecepatan inferensi untuk penggunaan real-time.
 - Sediakan dataset demo kecil agar juri dapat mencoba aplikasi tanpa instalasi besar.
 
-# Mauna — Dokumentasi Singkat (Read.md)
 
 Ringkasan  
 Mauna adalah API FastAPI untuk aplikasi pembelajaran bahasa isyarat. Repo ini menyediakan auth (JWT), middleware (CORS, rate-limit, JWT check), database (SQLAlchemy + databases), migration (alembic), dan seeder.
@@ -96,21 +95,6 @@ Quick start
    - python cli.py db:seed
 5. Jalankan server:
    - uvicorn src.app.main:app --reload
-
-Struktur rute penting
-- Public / testing:
-  - GET /              -> root testing (didaftarkan oleh test_router)
-  - GET /test
-  - GET /health
-- API prefix:
-  - Semua endpoint API berada di bawah /api
-  - Auth:
-    - POST /api/auth/register  -> register (body: RegisterRequest)
-    - POST /api/auth/login     -> login (body: LoginRequest) → respon: access_token
-    - POST /api/auth/refresh   -> refresh token (body: RefreshTokenRequest)
-    - POST /api/auth/logout    -> logout (Bearer token required)
-    - GET  /api/auth/profile   -> ambil profile (Bearer token)
-    - GET  /api/auth/verify    -> cek token valid (Bearer token)
 
 Middleware & keamanan
 - setup_middleware(app, rate_limit, cors_origins, environment)

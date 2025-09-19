@@ -1,24 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import Dict, Any
 
 from ..database import get_db
-from ..handler.auth.Authhandler import (
-    auth_handler,
-    get_current_user_from_state,
-    require_admin_state,
-    require_moderator_or_admin_state
-)
-from ..models.user import User
+from ..config.middleware import get_current_user, auth_manager
+from ..handler.auth.Authhandler import auth_handler  # Keep existing auth_handler
 from ..dto.auth_dto import (
-    RegisterRequest, 
-    LoginRequest, 
-    RefreshTokenRequest,
-    AuthResponse,
-    RegisterResponse,
-    ProfileResponse,
-    LogoutResponse,
-    VerifyResponse
+    RegisterRequest, LoginRequest, RefreshTokenRequest,
+    AuthResponse, RegisterResponse, ProfileResponse, LogoutResponse, VerifyResponse
 )
 
 router = APIRouter(
@@ -61,22 +50,25 @@ async def login(
 
 @router.post("/logout", status_code=status.HTTP_200_OK, response_model=LogoutResponse)
 async def logout(
-    current_user: User = Depends(get_current_user_from_state),
-    db: Session = Depends(get_db)
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Logout current user"""
     return await auth_handler.logout(current_user, db)
 
 @router.get("/profile", status_code=status.HTTP_200_OK, response_model=ProfileResponse)
 async def get_profile(
-    current_user: User = Depends(get_current_user_from_state)
+    request: Request,
+    current_user = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Get current user profile - requires authentication"""
     return await auth_handler.get_profile(current_user)
 
 @router.get("/verify", status_code=status.HTTP_200_OK, response_model=VerifyResponse)
 async def verify_token(
-    current_user: User = Depends(get_current_user_from_state)
+    request: Request,
+    current_user = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Verify if token is valid and user is authenticated"""
     return await auth_handler.verify_auth(current_user)

@@ -1,152 +1,23 @@
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, Union, cast
-from fastapi import HTTPException, status, Depends, Request
-from fastapi.security import OAuth2PasswordBearer, HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
-from jose import JWTError, jwt
-import re
 import os
+import re
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Any
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 
-from ...database import get_db
 from ...config.hash import hash_password, verify_password
 from ...models.user import User, UserRole
+from ...config.middleware import auth_manager
 
 # Load environment variables
 load_dotenv()
 
-# JWT Config from environment
-SECRET_KEY = os.getenv("SECRET_KEY", "your_secret_key_here")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
-
-# OAuth2 scheme for Swagger UI
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
-
-# HTTP Bearer scheme for token verification
-security = HTTPBearer()
-
 class AuthHandler:
-    """Authentication handler with JWT and active status management"""
+    """Authentication handler for business logic only"""
     
     def __init__(self):
-        self.secret_key = SECRET_KEY
-        self.algorithm = ALGORITHM
-        self.access_token_expire_minutes = ACCESS_TOKEN_EXPIRE_MINUTES
-    
-    def create_access_token(self, data: dict, expires_delta: Optional[timedelta] = None) -> str:
-        """Create JWT access token"""
-        to_encode = data.copy()
-        
-        if expires_delta:
-            expire = datetime.utcnow() + expires_delta
-        else:
-            expire = datetime.utcnow() + timedelta(minutes=self.access_token_expire_minutes)
-            
-        to_encode.update({"exp": expire, "iat": datetime.utcnow()})
-        
-        try:
-            encoded_jwt = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
-            return encoded_jwt
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Token creation failed: {str(e)}"
-            )
-    
-    def verify_token(self, token: str) -> Dict[str, Any]:
-        """Verify JWT token and return payload"""
-        try:
-            payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
-            return payload
-        except JWTError as e:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Invalid token: {str(e)}",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-    
-    def get_current_user_from_token(self, token: str, db: Session) -> User:
-        """Get user from token without security dependency"""
-        payload = self.verify_token(token)
-        
-        user_id = payload.get("sub")
-        if user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token payload"
-            )
-        
-        # Convert string ID to int
-        try:
-            user_id_int = int(user_id)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid user ID in token"
-            )
-            
-        user = db.query(User).filter(User.id == user_id_int).first()
-        if user is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found"
-            )
-        
-        # Check if user is still active - fix SQLAlchemy type error
-        if not bool(user.is_active):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User account is inactive"
-            )
-        
-        return user
-    
-    def get_current_user_from_state(self, request: Request, db: Session) -> User:
-        """
-        Ambil user berdasarkan request.state (diisi oleh JWTAuthMiddleware).
-        Digunakan sebagai dependency yang lebih ringan karena token sudah diverifikasi
-        oleh middleware.
-        """
-        user_id = getattr(request.state, "user_id", None)
-        if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required"
-            )
-
-        try:
-            user_id_int = int(user_id)
-        except (ValueError, TypeError):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid user id in token"
-            )
-
-        user = db.query(User).filter(User.id == user_id_int).first()
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found"
-            )
-
-        if not bool(user.is_active):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User account is inactive"
-            )
-
-        return user
-
-    # For OAuth2PasswordBearer
-    async def get_current_user(self, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
-        """Get current authenticated user using OAuth2"""
-        return self.get_current_user_from_token(token, db)
-    
-    # For HTTPBearer
-    async def get_current_user_bearer(self, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)) -> User:
-        """Get current authenticated user using Bearer token"""
-        return self.get_current_user_from_token(credentials.credentials, db)
+        self.auth_manager = auth_manager
     
     def validate_email(self, email: str) -> bool:
         """Validate email format"""
@@ -175,19 +46,18 @@ class AuthHandler:
         }
     
     async def register(self, username: str, email: str, password: str, nama: str = None, db: Session = None) -> Dict[str, Any]:
-        """Register new user - no token given, user must login separately"""
+        """Register new user"""
         if db is None:
             raise ValueError("Database session is required")
             
         try:
-            # Validate email format
+            # Validations
             if not self.validate_email(email):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid email format"
                 )
             
-            # Validate password strength
             password_validation = self.validate_password(password)
             if not password_validation["is_valid"]:
                 raise HTTPException(
@@ -198,13 +68,12 @@ class AuthHandler:
                     }
                 )
             
-            # Check if user already exists
+            # Check existing user
             existing_user = db.query(User).filter(
                 (User.email == email) | (User.username == username)
             ).first()
             
             if existing_user:
-                # Cast to string to fix type error
                 if str(existing_user.email) == email:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
@@ -216,7 +85,7 @@ class AuthHandler:
                         detail="Username already taken"
                     )
             
-            # Create new user - inactive by default until first login
+            # Create user
             hashed_password = hash_password(password)
             
             new_user = User(
@@ -225,7 +94,7 @@ class AuthHandler:
                 password=hashed_password,
                 nama=nama,
                 role=UserRole.USER,
-                is_active=False,  # User inactive until first login
+                is_active=False,
                 is_verified=False
             )
             
@@ -233,7 +102,6 @@ class AuthHandler:
             db.commit()
             db.refresh(new_user)
             
-            # NO TOKEN GIVEN - user must login to get token
             return {
                 "success": True,
                 "message": "User registered successfully. Please login to get access token.",
@@ -245,6 +113,7 @@ class AuthHandler:
                     "full_name": new_user.full_name,
                     "is_active": bool(new_user.is_active),
                     "is_verified": bool(new_user.is_verified),
+                    "next_step": "Please use /api/auth/login to get your access token"
                 }
             }
             
@@ -257,13 +126,14 @@ class AuthHandler:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Registration failed: {str(e)}"
             )
+            
     async def login(self, email_or_username: str, password: str, db: Session = None) -> Dict[str, Any]:
-        """Login user with email/username and password"""
+        """Login user"""
         if db is None:
             raise ValueError("Database session is required")
             
         try:
-            # Find user by email or username
+            # Find user
             user = db.query(User).filter(
                 (User.email == email_or_username) | (User.username == email_or_username)
             ).first()
@@ -271,39 +141,39 @@ class AuthHandler:
             if not user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid credentials"
+                    detail="Invalid email/username or password"
                 )
             
-            # Verify password - cast to string to fix type error
+            # Verify password
             if not verify_password(password, str(user.password)):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid credentials"
+                    detail="Invalid email/username or password"
                 )
             
-            # Update user status using ORM proper approach
-            setattr(user, 'is_active', True)
-            setattr(user, 'last_login', datetime.utcnow())
+            # Update user status
+            if not bool(user.is_active):
+                setattr(user, 'is_active', True)
+                setattr(user, 'last_login', datetime.utcnow())
+                db.commit()
+                db.refresh(user)
+            else:
+                setattr(user, 'last_login', datetime.utcnow())
+                db.commit()
             
-            db.commit()
-            db.refresh(user)
-            
-            # Create access token
-            access_token = self.create_access_token(
-                data={"sub": str(user.id)}
+            # Create token using auth_manager
+            access_token_expires = timedelta(minutes=self.auth_manager.access_token_expire_minutes)
+            access_token = self.auth_manager.create_access_token(
+                data={"sub": str(user.id), "username": user.username, "role": user.role.value},
+                expires_delta=access_token_expires
             )
-            
-            # Get last_login as string if exists
-            last_login_str = None
-            if user.last_login is not None:
-                last_login_str = user.last_login.isoformat() if isinstance(user.last_login, datetime) else None
             
             return {
                 "success": True,
                 "message": "Login successful",
                 "access_token": access_token,
                 "token_type": "bearer",
-                "expires_in": self.access_token_expire_minutes * 60,
+                "expires_in": self.auth_manager.access_token_expire_minutes * 60,
                 "data": {
                     "id": user.id,
                     "unique_id": user.unique_id,
@@ -313,25 +183,26 @@ class AuthHandler:
                     "role": user.role.value,
                     "is_active": bool(user.is_active),
                     "is_verified": bool(user.is_verified),
-                    "last_login": last_login_str
+                    "last_login": user.last_login.isoformat() if user.last_login is not None else None
                 }
             }
             
         except HTTPException:
+            db.rollback()
             raise
         except Exception as e:
+            db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Login failed: {str(e)}"
             )
     
     async def logout(self, current_user: User, db: Session = None) -> Dict[str, Any]:
-        """Logout user - set is_active to False"""
+        """Logout user"""
         if db is None:
             raise ValueError("Database session is required")
             
         try:
-            # Update user status using ORM proper approach
             setattr(current_user, 'is_active', False)
             db.commit()
             
@@ -357,8 +228,7 @@ class AuthHandler:
             raise ValueError("Database session is required")
             
         try:
-            # Verify current token
-            payload = self.verify_token(token)
+            payload = self.auth_manager.verify_token(token)
             user_id = payload.get("sub")
             
             if not user_id:
@@ -367,7 +237,6 @@ class AuthHandler:
                     detail="Invalid token payload"
                 )
                 
-            # Get user
             user = db.query(User).filter(User.id == int(user_id)).first()
             if not user:
                 raise HTTPException(
@@ -375,17 +244,15 @@ class AuthHandler:
                     detail="User not found"
                 )
                 
-            # Check if user is active
             if not bool(user.is_active):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="User account is inactive"
                 )
                 
-            # Create new token with extended expiry
-            new_token = self.create_access_token(
-                data={"sub": user_id},
-                expires_delta=timedelta(minutes=self.access_token_expire_minutes)
+            new_token = self.auth_manager.create_access_token(
+                data={"sub": user_id, "username": user.username, "role": user.role.value},
+                expires_delta=timedelta(minutes=self.auth_manager.access_token_expire_minutes)
             )
             
             return {
@@ -393,7 +260,7 @@ class AuthHandler:
                 "message": "Token refreshed successfully",
                 "access_token": new_token,
                 "token_type": "bearer",
-                "expires_in": self.access_token_expire_minutes * 60
+                "expires_in": self.auth_manager.access_token_expire_minutes * 60
             }
             
         except HTTPException:
@@ -405,19 +272,11 @@ class AuthHandler:
             )
     
     async def get_profile(self, current_user: User) -> Dict[str, Any]:
-        """Get current user profile"""
-        # Safely handle datetime types
-        created_at_str = None
-        if current_user.created_at is not None:
-            created_at_str = current_user.created_at.isoformat() if isinstance(current_user.created_at, datetime) else None
-            
-        updated_at_str = None
-        if current_user.updated_at is not None:
-            updated_at_str = current_user.updated_at.isoformat() if isinstance(current_user.updated_at, datetime) else None
-            
-        last_login_str = None
-        if current_user.last_login is not None:
-            last_login_str = current_user.last_login.isoformat() if isinstance(current_user.last_login, datetime) else None
+        """Get user profile"""
+        # Handle datetime serialization
+        created_at_str = current_user.created_at.isoformat() if current_user.created_at is not None else None
+        updated_at_str = current_user.updated_at.isoformat() if current_user.updated_at is not None else None
+        last_login_str = current_user.last_login.isoformat() if current_user.last_login is not None else None
         
         return {
             "success": True,
@@ -427,7 +286,7 @@ class AuthHandler:
                 "unique_id": current_user.unique_id,
                 "username": current_user.username,
                 "email": current_user.email,
-                "nama" : current_user.nama,
+                "nama": current_user.nama,
                 "telpon": current_user.telpon,
                 "role": current_user.role.value,
                 "is_active": bool(current_user.is_active),
@@ -441,7 +300,7 @@ class AuthHandler:
         }
     
     async def verify_auth(self, current_user: User) -> Dict[str, Any]:
-        """Verify if user is authenticated and token is valid"""
+        """Verify authentication"""
         return {
             "success": True,
             "message": "Token is valid",
@@ -454,47 +313,6 @@ class AuthHandler:
                 "verified_at": datetime.utcnow().isoformat()
             }
         }
-    
-    def require_admin(self, current_user: User):
-        """Require admin role"""
-        if current_user.role is not UserRole.ADMIN:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Admin access required"
-            )
-        return current_user
-    
-    def require_moderator_or_admin(self, current_user: User):
-        """Require moderator or admin role"""
-        # Use equality instead of `in` for Enum comparison
-        if current_user.role is not UserRole.ADMIN and current_user.role is not UserRole.MODERATOR:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Moderator or admin access required"
-            )
-        return current_user
 
-# Create global auth handler instance
+# Global auth handler instance
 auth_handler = AuthHandler()
-
-# Export commonly used functions for dependency injection
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
-    return await auth_handler.get_current_user(token, db)
-
-async def get_current_user_bearer(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)) -> User:
-    return await auth_handler.get_current_user_bearer(credentials, db)
-
-# New: dependency that uses request.state populated by middleware
-async def get_current_user_from_state(request: Request, db: Session = Depends(get_db)) -> User:
-    """
-    Dependency: gunakan user_id yang sudah diset di request.state oleh JWTAuthMiddleware.
-    Middleware sudah memverifikasi token; disini kita hanya load user dari DB.
-    """
-    return auth_handler.get_current_user_from_state(request, db)
-
-# New: role-based dependencies using state-based user
-async def require_admin_state(current_user: User = Depends(get_current_user_from_state)) -> User:
-    return auth_handler.require_admin(current_user)
-
-async def require_moderator_or_admin_state(current_user: User = Depends(get_current_user_from_state)) -> User:
-    return auth_handler.require_moderator_or_admin(current_user)

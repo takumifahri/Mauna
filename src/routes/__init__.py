@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from .auhtRoutes import router as auth_router
-# from .userRoutes import router as user_router
+from .badges_routes import router as badge_router
+from .userRoutes import router as user_router
 
 # Buat router utama untuk /api
 api_router = APIRouter(prefix="/api")
 
 # Tambahkan semua sub-router ke api_router
 api_router.include_router(auth_router)
-# api_router.include_router(user_router)
+api_router.include_router(badge_router)
+api_router.include_router(user_router)
 
 # Testing router untuk debugging dan health checks
 test_router = APIRouter(tags=["Testing"])
