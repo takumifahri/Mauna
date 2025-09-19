@@ -1,4 +1,3 @@
-
 # Database exports
 from .db import (
     db_config,
@@ -23,13 +22,18 @@ from .connect import (
     DATABASE_URL,
     jwt_config
 )
+
 # Seeder exports
 from .seeder import (
     run_all_seeders,
     run_seeder,
+    list_seeders,
     BaseSeeder,
-    UserSeeder,
+    registry,
 )
+
+# Note: Seeders are auto-discovered by registry.discover_seeders()
+# No need to manually import them here
 
 __all__ = [
     # Database
@@ -53,11 +57,10 @@ __all__ = [
     'DATABASE_URL',
     'jwt_config',
     
-      
     # Seeder
     'run_all_seeders',
     'run_seeder',
+    'list_seeders',
     'BaseSeeder',
-    'UserSeeder',
-    
+    'registry',
 ]

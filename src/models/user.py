@@ -12,13 +12,12 @@ class User(Base):
     __tablename__ = "users"
     
     id = Column(Integer, primary_key=True, index=True)
-    unique_id = Column(String(36), unique=True, default=lambda: "USR-"+str(uuid4()), index=True, nullable=False)
-    username = Column(String(255), unique=True, index=True, nullable=False)
+    unique_id = Column(String(255), unique=True, default=lambda: "USR-"+str(uuid4()), index=True, nullable=False)
+    username = Column(String(255),  index=True, nullable=False)
     email = Column(String(255), unique=True, index=True, nullable=False)
     password = Column(String(255), nullable=False)
-    first_name = Column(String(255), nullable=True)
-    last_name = Column(String(255), nullable=True)
-    phone = Column(String(255), nullable=True)
+    nama = Column(String(255), nullable=True)
+    telpon = Column(String(255), nullable=True)
     role = Column(Enum(UserRole), default=UserRole.USER)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
@@ -33,12 +32,7 @@ class User(Base):
     def __repr__(self):
         return f"<User(id={self.id}, username={self.username}, email={self.email})>"
     
-    @property
-    def full_name(self):
-        if self.first_name is not None and self.last_name is not None:
-            return f"{self.first_name} {self.last_name}"
-        return self.username
-    
+
     @property
     def is_admin(self):
         return self.role == UserRole.ADMIN

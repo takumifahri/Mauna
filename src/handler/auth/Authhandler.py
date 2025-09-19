@@ -174,8 +174,8 @@ class AuthHandler:
             "errors": errors
         }
     
-    async def register(self, username: str, email: str, password: str, first_name: str = None, last_name: str = None, db: Session = None) -> Dict[str, Any]:
-        """Register new user"""
+    async def register(self, username: str, email: str, password: str, nama: str = None, db: Session = None) -> Dict[str, Any]:
+        """Register new user - no token given, user must login separately"""
         if db is None:
             raise ValueError("Database session is required")
             
@@ -216,17 +216,16 @@ class AuthHandler:
                         detail="Username already taken"
                     )
             
-            # Create new user
+            # Create new user - inactive by default until first login
             hashed_password = hash_password(password)
             
             new_user = User(
                 username=username,
                 email=email,
                 password=hashed_password,
-                first_name=first_name,
-                last_name=last_name,
+                nama=nama,
                 role=UserRole.USER,
-                is_active=True,  # Set active by default
+                is_active=False,  # User inactive until first login
                 is_verified=False
             )
             
@@ -234,23 +233,18 @@ class AuthHandler:
             db.commit()
             db.refresh(new_user)
             
-            # Create access token
-            access_token = self.create_access_token(
-                data={"sub": str(new_user.id)}
-            )
-            
+            # NO TOKEN GIVEN - user must login to get token
             return {
                 "success": True,
-                "message": "User registered successfully",
-                "access_token": access_token,
-                "token_type": "bearer",
+                "message": "User registered successfully. Please login to get access token.",
                 "data": {
                     "id": new_user.id,
                     "unique_id": new_user.unique_id,
                     "username": new_user.username,
                     "email": new_user.email,
                     "full_name": new_user.full_name,
-                    "is_active": bool(new_user.is_active)
+                    "is_active": bool(new_user.is_active),
+                    "is_verified": bool(new_user.is_verified),
                 }
             }
             
@@ -263,7 +257,6 @@ class AuthHandler:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Registration failed: {str(e)}"
             )
-    
     async def login(self, email_or_username: str, password: str, db: Session = None) -> Dict[str, Any]:
         """Login user with email/username and password"""
         if db is None:
@@ -434,10 +427,8 @@ class AuthHandler:
                 "unique_id": current_user.unique_id,
                 "username": current_user.username,
                 "email": current_user.email,
-                "first_name": current_user.first_name,
-                "last_name": current_user.last_name,
-                "full_name": current_user.full_name,
-                "phone": current_user.phone,
+                "nama" : current_user.nama,
+                "telpon": current_user.telpon,
                 "role": current_user.role.value,
                 "is_active": bool(current_user.is_active),
                 "is_verified": bool(current_user.is_verified),

@@ -1,23 +1,28 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.orm import Session
 from typing import Dict, Any
-from pydantic import BaseModel, EmailStr, Field, validator
 
 from ..database import get_db
 from ..handler.auth.Authhandler import (
     auth_handler,
-    get_current_user,
-    get_current_user_bearer,
-    get_current_user_from_state,            # <-- new
-    require_admin_state,                    # <-- optional for admin-only
-    require_moderator_or_admin_state        # <-- optional for mod/admin
+    get_current_user_from_state,
+    require_admin_state,
+    require_moderator_or_admin_state
 )
 from ..models.user import User
-from ..dto.auth_dto import RegisterRequest, LoginRequest, RefreshTokenRequest
+from ..dto.auth_dto import (
+    RegisterRequest, 
+    LoginRequest, 
+    RefreshTokenRequest,
+    AuthResponse,
+    RegisterResponse,
+    ProfileResponse,
+    LogoutResponse,
+    VerifyResponse
+)
 
-# Create router instance - hapus prefix /api karena sudah di-handle di __init__.py
 router = APIRouter(
-    prefix="/auth",  # Sekarang akan menjadi /api/auth
+    prefix="/auth",
     tags=["Authentication"],
     responses={
         400: {"description": "Bad Request"},
@@ -28,23 +33,21 @@ router = APIRouter(
     },
 )
 
-# Routes
-@router.post("/register", status_code=status.HTTP_201_CREATED, response_model=Dict[str, Any])
+@router.post("/register", status_code=status.HTTP_201_CREATED, response_model=RegisterResponse)
 async def register(
     register_data: RegisterRequest, 
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
-    """Register a new user and return access token"""
+    """Register a new user - no token given, must login separately"""
     return await auth_handler.register(
         username=register_data.username,
         email=register_data.email,
         password=register_data.password,
-        first_name=register_data.first_name,
-        last_name=register_data.last_name,
+        nama=register_data.nama,
         db=db
     )
 
-@router.post("/login", status_code=status.HTTP_200_OK, response_model=Dict[str, Any])
+@router.post("/login", status_code=status.HTTP_200_OK, response_model=AuthResponse)
 async def login(
     login_data: LoginRequest, 
     db: Session = Depends(get_db)
@@ -56,29 +59,29 @@ async def login(
         db=db
     )
 
-@router.post("/logout", status_code=status.HTTP_200_OK, response_model=Dict[str, Any])
+@router.post("/logout", status_code=status.HTTP_200_OK, response_model=LogoutResponse)
 async def logout(
-    current_user: User = Depends(get_current_user_from_state),  # use middleware-backed dependency
+    current_user: User = Depends(get_current_user_from_state),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """Logout current user"""
     return await auth_handler.logout(current_user, db)
 
-@router.get("/profile", status_code=status.HTTP_200_OK, response_model=Dict[str, Any])
+@router.get("/profile", status_code=status.HTTP_200_OK, response_model=ProfileResponse)
 async def get_profile(
-    current_user: User = Depends(get_current_user_from_state)  # protected via middleware
+    current_user: User = Depends(get_current_user_from_state)
 ) -> Dict[str, Any]:
-    """Get current user profile"""
+    """Get current user profile - requires authentication"""
     return await auth_handler.get_profile(current_user)
 
-@router.get("/verify", status_code=status.HTTP_200_OK, response_model=Dict[str, Any])
+@router.get("/verify", status_code=status.HTTP_200_OK, response_model=VerifyResponse)
 async def verify_token(
     current_user: User = Depends(get_current_user_from_state)
 ) -> Dict[str, Any]:
     """Verify if token is valid and user is authenticated"""
     return await auth_handler.verify_auth(current_user)
 
-@router.post("/refresh", status_code=status.HTTP_200_OK, response_model=Dict[str, Any])
+@router.post("/refresh", status_code=status.HTTP_200_OK, response_model=AuthResponse)
 async def refresh_token(
     refresh_data: RefreshTokenRequest,
     db: Session = Depends(get_db)
