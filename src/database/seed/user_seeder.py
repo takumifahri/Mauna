@@ -18,6 +18,12 @@ class UserSeeder(BaseSeeder):
     
     def __init__(self):
         super().__init__()
+    def _generate_unique_id(self, user_id: int) -> str:
+        """Generate unique_id untuk user"""
+        timestamp = int(datetime.now().timestamp())
+        # Combine user_id with timestamp and apply a simple transformation
+        encoded_id = ((timestamp % 10000) * 100) + (user_id % 100)
+        return f"USR-{encoded_id:06d}"
     
     def run(self):
         """Run user seeding"""
@@ -72,7 +78,7 @@ class UserSeeder(BaseSeeder):
             ]
             
             created_count = 0
-            for user_data in users_data:
+            for i, user_data in enumerate(users_data, 1):
                 existing_user = self.db.query(User).filter(
                     (User.email == user_data["email"]) | 
                     (User.username == user_data["username"])
@@ -82,10 +88,18 @@ class UserSeeder(BaseSeeder):
                     # Hash password before creating user
                     user_data["password"] = hash_password(user_data["password"])
                     
+                    # Generate unique_id - Method 1: Predictable ID
+                    user_data["unique_id"] = f"USR-{i:05d}"
+                    
                     user = User(**user_data)
                     self.db.add(user)
+                    self.db.flush()  # Flush untuk mendapatkan ID
+                    
+                    # Method 2: Update dengan ID asli (opsional)
+                    # user.unique_id = f"USR-{user.id:05d}"
+                    
                     created_count += 1
-                    print(f"  ✅ Created user: {user_data['username']} ({user_data['email']})")
+                    print(f"  ✅ Created user: {user_data['username']} ({user_data['email']}) - ID: {user_data['unique_id']}")
                 else:
                     print(f"  ⚠️ User already exists: {user_data['username']} ({user_data['email']})")
             
@@ -108,6 +122,13 @@ def create_user_if_not_exists(db: Session, data: Dict[str, Any]) -> User:
 
     if not data["password"].startswith("$2b$"):
         data["password"] = hash_password(data["password"])
+
+    # Generate unique_id jika tidak ada
+    if "unique_id" not in data or not data["unique_id"]:
+        # Get next available ID
+        max_id = db.query(User.id).order_by(User.id.desc()).first()
+        next_id = (max_id[0] + 1) if max_id else 1
+        data["unique_id"] = f"USR-{next_id:05d}"
 
     user = User(**data)
     db.add(user)

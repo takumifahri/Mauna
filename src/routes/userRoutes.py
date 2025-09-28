@@ -100,6 +100,8 @@ async def get_users_stats(
             "message": f"Failed to retrieve statistics: {str(e)}",
             "data": {}
         }
+        
+        
 @router.patch("/{user_id}/role")
 async def update_user_role(
     user_id: int,

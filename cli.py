@@ -19,7 +19,7 @@ def reset_alembic():
         if versions_path.exists():
             # Hapus semua file migration kecuali __init__.py
             for file in versions_path.glob("*.py"):
-                if file.name is not "__init__.py":
+                if file.name != "__init__.py":
                     file.unlink()
                     print(f"🗑️ Removed migration: {file.name}")
             

@@ -58,10 +58,11 @@ class SeederRegistry:
                             self.register(obj)
                             
                 except ImportError as e:
-                    print(f"⚠️ Could not import {full_module_name}: {e}")
+                    # ✅ Fix Unicode error - use ASCII characters only
+                    print(f"Warning: Could not import {full_module_name}: {e}")
                     
         except ImportError:
-            print(f"⚠️ Could not import package {package_name}")
+            print(f"Warning: Could not import package {package_name}")
         
         self._discovered = True
     
@@ -87,49 +88,49 @@ def run_all_seeders():
     seeders = registry.get_seeders()
     
     if not seeders:
-        print("⚠️ No seeders found")
+        print("Warning: No seeders found")
         return
     
-    print("🌱 Starting database seeding...")
+    print("Starting database seeding...")
     
     for SeederClass in seeders:
         try:
-            print(f"🌱 Running {SeederClass.__name__}...")
+            print(f"Running {SeederClass.__name__}...")
             seeder = SeederClass()
             seeder.run()
             seeder.close()
-            print(f"✅ {SeederClass.__name__} completed")
+            print(f"Success: {SeederClass.__name__} completed")
         except Exception as e:
-            print(f"❌ Seeder {SeederClass.__name__} failed: {e}")
+            print(f"Error: Seeder {SeederClass.__name__} failed: {e}")
             try:
                 seeder.close()
             except:
                 pass
     
-    print("✅ Database seeding completed")
+    print("Database seeding completed")
 
 def run_seeder(seeder_name: str):
     """Run specific seeder by name"""
     try:
         SeederClass = registry.get_seeder_by_name(seeder_name)
         
-        print(f"🌱 Running {seeder_name}...")
+        print(f"Running {seeder_name}...")
         seeder = SeederClass()
         seeder.run()
         seeder.close()
-        print(f"✅ {seeder_name} completed")
+        print(f"Success: {seeder_name} completed")
         
     except ValueError as e:
-        print(f"❌ {e}")
+        print(f"Error: {e}")
         available = [s.__name__ for s in registry.get_seeders()]
         print(f"Available seeders: {available}")
     except Exception as e:
-        print(f"❌ {seeder_name} failed: {e}")
+        print(f"Error: {seeder_name} failed: {e}")
 
 def list_seeders():
     """List all available seeders"""
     seeders = registry.get_seeders()
-    print("\n📋 Available Seeders:")
+    print("\nAvailable Seeders:")
     print("=" * 30)
     for seeder in seeders:
         print(f"• {seeder.__name__}")

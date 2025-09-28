@@ -3,6 +3,8 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.hybrid import hybrid_property
 import enum
+from .user_badge import user_badge_association  # ✅ Fix import path
+# ❌ Remove this line: from models import user_badge
 from ..database.db import Base
 
 class UserRole(enum.Enum):
@@ -30,8 +32,10 @@ class User(Base):
     # Relasi many-to-many dengan Badge
     badges = relationship(
         "Badge",
-        secondary="user_badges",
-        back_populates="users"
+        secondary=user_badge_association,
+        back_populates="users",
+        lazy="dynamic",  # Untuk query yang efisien
+        cascade="save-update, merge"  # Tidak auto-delete badges saat user dihapus
     )
     
     # Timestamps
@@ -59,10 +63,12 @@ class User(Base):
     def full_name(self) -> str:
         """Get user's full name or fallback to username"""
         return str(self.nama) if self.nama is not None else str(self.username)
+    
     @property
     def role_value(self) -> str:
         """Get role as string value"""
         return self.role.value if self.role is not None else "user"
+    
     def add_badge(self, badge):
         """Helper method to add badge to user"""
         if badge not in self.badges:
