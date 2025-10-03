@@ -11,12 +11,37 @@ class Soal(Base):
     id = Column(Integer, primary_key=True, index=True)
     question = Column(Text, nullable=False)
     answer = Column(Text, nullable=False)
-    dictionary_id = Column(Integer, ForeignKey("kamus.id"), nullable=False)
     video_url = Column(Text, nullable=True)  # URL to a related video
-    # Relationship to Kamus
+    image_url = Column(Text, nullable=True)  # URL to question image
+    
+    # ✅ Foreign Key ke Kamus (Dictionary)
+    dictionary_id = Column(Integer, ForeignKey("kamus.id"), nullable=False)
+    
+    # ✅ Foreign Key ke SubLevel  
+    sublevel_id = Column(Integer, ForeignKey("sublevel.id"), nullable=False)
+    
+    # ✅ Many-to-One: Soal → Kamus
     kamus_ref = relationship(
-        "kamus",
-        back_populates="soal",
-        foreign_keys="[Soal.dictionary_id]",
+        "Kamus",  # Fixed: should be "Kamus" not "kamus"
+        back_populates="soal_list",
         lazy="joined"
     )
+    
+    # ✅ Many-to-One: Soal → SubLevel
+    sublevel_ref = relationship(
+        "SubLevel",
+        back_populates="soal_list",
+        lazy="joined"
+    )
+    
+    # Hybrid property untuk mendapatkan level dari sublevel
+    @hybrid_property
+    def level_name(self):
+        return self.sublevel_ref.level_ref.name if self.sublevel_ref and self.sublevel_ref.level_ref else None
+    
+    @hybrid_property
+    def sublevel_name(self):
+        return self.sublevel_ref.name if self.sublevel_ref else None
+    
+    def __repr__(self):
+        return f"<Soal(id={self.id}, question='{self.question[:30]}...', sublevel='{self.sublevel_name}')>"

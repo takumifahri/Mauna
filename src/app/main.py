@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends
 from fastapi.security import OAuth2PasswordBearer
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 import os
 from passlib.context import CryptContext
@@ -11,6 +12,8 @@ from src.database import connect_db, disconnect_db, get_db
 
 # Import router dari modul routes
 from src.routes import api_router, test_router
+from src.utils.FileHandler import router as file_router
+from src.routes.storageRoutes import router as storage_router  # Import storage router
 
 # Load environment variables
 load_dotenv()
@@ -31,9 +34,14 @@ setup_middleware(
     environment=environment
 )
 
+# Mount static files untuk storage
+storage_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "storage"))
+if os.path.exists(storage_path):
+    app.mount("/static", StaticFiles(directory=storage_path), name="static")
+
 # Konfigurasi keamanan
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")  # Sesuaikan dengan prefix
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
 # Event handler
 @app.on_event("startup")
@@ -70,8 +78,10 @@ async def health_check(db: Session = Depends(get_db)):
         }
 
 # Tambahkan router ke aplikasi
-app.include_router(test_router)  # Root router (/)
-app.include_router(api_router)   # API router (/api/...)
+app.include_router(test_router)       # Root router (/)
+app.include_router(api_router)        # API router (/api/...) - dengan auth
+app.include_router(file_router)       # File router (/file/...) - dengan auth
+app.include_router(storage_router)    # Storage router (/storage/...) - PUBLIC
 
 if __name__ == "__main__":
     import uvicorn

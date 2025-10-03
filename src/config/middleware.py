@@ -49,6 +49,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             "/api/auth/register",
             "/api/auth/refresh",
             "/static/.*",
+            "/storage/.*",  # TAMBAHKAN INI
             "/favicon.ico"
         ]
         
@@ -112,7 +113,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             
             response = await call_next(request)
             self._add_process_time_header(response, start_time)
-            return response
+            return response  # ✅ TAMBAHKAN INI!
             
         except JWTError as e:
             return JSONResponse(
@@ -169,7 +170,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.rate_limit = rate_limit_per_minute
         self.clients = {}
         self.window_seconds = 60
-        self.exclude_paths = exclude_paths or ["/health", "/metrics", "/_ah/.*", "/favicon.ico"]
+        self.exclude_paths = exclude_paths or ["/health", "/metrics", "/_ah/.*", "/favicon.ico", "/static/.*", "/storage/.*"]
     
     async def dispatch(self, request: Request, call_next):
         """Process rate limiting"""
@@ -206,8 +207,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response.headers["X-RateLimit-Limit"] = str(self.rate_limit)
         response.headers["X-RateLimit-Remaining"] = str(remaining)
         response.headers["X-RateLimit-Reset"] = str(int(current_time + self.window_seconds))
-        
-        return response
+        return response  # ✅ TAMBAHKAN INI! - MISSING RETURN STATEMENT
     
     def _get_client_id(self, request: Request) -> str:
         """Get client identifier"""
@@ -473,7 +473,6 @@ def require_user_or_above(request: Request, db: Session = Depends(lambda: None))
 # =============================================================================
 # SETUP FUNCTION
 # =============================================================================
-
 def setup_middleware(
     app: FastAPI, 
     jwt_public_paths: Optional[List[str]] = None,
@@ -487,7 +486,7 @@ def setup_middleware(
     default_public_paths = [
         "/", "/docs", "/redoc", "/openapi.json", "/health",
         "/api/auth/login", "/api/auth/register", "/api/auth/refresh",
-        "/static/.*", "/favicon.ico"
+        "/static/.*", "/storage/.*", "/favicon.ico"  # ✅ TAMBAHKAN /storage/.*
     ]
     
     # Setup CORS

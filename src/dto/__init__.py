@@ -30,6 +30,13 @@ from .badges_dto import (
     UserWithBadgesDTO
 )
 
+from .kamus_dto import (
+    KamusCreateDTO,
+    KamusUpdateDTO,
+    KamusListResponseDTO,
+    KamusResponseDTO,
+)
+
 __all__ = [
     # Auth DTOs
     "RegisterRequest",
@@ -55,5 +62,11 @@ __all__ = [
     "BadgeCreateDTO",
     "BadgeResponseDTO",
     "UserBadgeDTO",
-    "UserWithBadgesDTO"
+    "UserWithBadgesDTO",
+    
+    # Kamus DTOs
+    "KamusCreateDTO",
+    "KamusUpdateDTO",
+    "KamusListResponseDTO",
+    "KamusResponseDTO",
 ]

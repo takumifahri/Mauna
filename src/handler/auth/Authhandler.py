@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
+import uuid  # Tambahkan import ini
 
 from ...config.hash import hash_password, verify_password
 from ...models.user import User, UserRole
@@ -87,9 +88,12 @@ class AuthHandler:
             
             # Create user
             hashed_password = hash_password(password)
+            # Generate unique_id
+            unique_id = str(uuid.uuid4())  # ✅ Generate UUID
             
             new_user = User(
                 username=username,
+                unique_id=unique_id,
                 email=email,
                 password=hashed_password,
                 nama=nama,

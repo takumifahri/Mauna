@@ -22,10 +22,15 @@ class kamus(Base):
         return f"<kamus(id={self.id}, word_text={self.word_text})>"
     
     # Relation to Soal
-    soal = relationship(
+       # ✅ One-to-Many: Kamus → Soal
+    soal_list = relationship(
         "Soal",
         back_populates="kamus_ref",
-        foreign_keys="[Soal.dictionary_id]",
-        cascade="all, delete-orphan",
+        cascade="all, delete-orphan",  # Jika kamus dihapus, soal ikut terhapus
         lazy="dynamic"
     )
+        # Hybrid property untuk count soal
+    @hybrid_property
+    def total_soal(self):
+        return len(self.soal_list.all()) if self.soal_list else 0
+    

@@ -4,6 +4,8 @@ from .user import User, UserRole
 from .badges import Badge
 from .kamus import kamus
 from .soal import Soal
+from .level import Level
+from .sublevel import SubLevel
 # Export untuk kemudahan import
 __all__ = [
     'user_badge_association',
@@ -12,4 +14,6 @@ __all__ = [
     'Badge',
     'kamus',
     'Soal',
+    'Level',
+    'SubLevel'
 ]

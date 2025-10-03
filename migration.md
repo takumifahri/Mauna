@@ -65,7 +65,7 @@ python cli.py db:seed UserSeeder
 python cli.py dev
 
 # Or manually
-uvicorn src.main:app --reload
+ uvicorn src.app.main:app --reload
 
 # Test application
 curl http://localhost:8000
