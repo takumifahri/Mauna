@@ -34,6 +34,9 @@ class Soal(Base):
         lazy="joined"
     )
     
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     # Hybrid property untuk mendapatkan level dari sublevel
     @hybrid_property
     def level_name(self):

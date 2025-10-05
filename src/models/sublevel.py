@@ -31,6 +31,31 @@ class SubLevel(Base):
         lazy="dynamic"
     )
     
+    # ✅ Add relationship to Progress
+    progress_list = relationship(
+        "Progress",
+        back_populates="sublevel_ref",
+        cascade="all, delete-orphan",
+        lazy="dynamic"
+    )
+
+    # ✅ Add helper methods
+    def get_user_progress(self, user_id: int):
+        """Get progress for specific user"""
+        return self.progress_list.filter_by(user_id=user_id).first()
+
+    def is_unlocked_for_user(self, user_id: int) -> bool:
+        """Check if sublevel is unlocked for user"""
+        progress = self.get_user_progress(user_id)
+        if not progress:
+            # Auto-unlock first sublevel in each level
+            first_sublevel = self.level_ref.sublevels.order_by('id').first()
+            return self.id == first_sublevel.id
+        return progress.is_unlocked
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     # Hybrid property untuk count soal
     @hybrid_property
     def total_soal(self):

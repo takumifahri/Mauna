@@ -1,19 +1,23 @@
 # Import models dalam urutan yang benar untuk menghindari circular imports
-from .user_badge import user_badge_association  # Import tabel asosiatif dulu
+from .user_badge import user_badge_association
 from .user import User, UserRole
 from .badges import Badge
-from .kamus import kamus
-from .soal import Soal
+from .kamus import Kamus  # ✅ Fix: Capital K
 from .level import Level
 from .sublevel import SubLevel
+from .soal import Soal
+from .progress import Progress, ProgressStatus  # ✅ Add Progress
+
 # Export untuk kemudahan import
 __all__ = [
     'user_badge_association',
     'User',
     'UserRole', 
     'Badge',
-    'kamus',
-    'Soal',
+    'Kamus',  # ✅ Fix: Capital K
     'Level',
-    'SubLevel'
+    'SubLevel',
+    'Soal',
+    'Progress',
+    'ProgressStatus'
 ]

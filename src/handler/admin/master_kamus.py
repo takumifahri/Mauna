@@ -2,7 +2,7 @@ from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any
 from src.utils.FileHandler import save_image
-from src.models.kamus import kamus
+from src.models.kamus import Kamus
 import os
 class KamusHandler:
     def __init__(self, db: Session):
@@ -13,7 +13,7 @@ class KamusHandler:
         print(f"🔍 Handler Debug: image={image}, video_url={video_url}")
         
         # Check for existing word
-        if self.db.query(kamus).filter(kamus.word_text == word_text).first():
+        if self.db.query(Kamus).filter(Kamus.word_text == word_text).first():
             raise HTTPException(status_code=400, detail="Word already exists")
         
         # Handle image upload
@@ -30,7 +30,7 @@ class KamusHandler:
             print("ℹ️ No image provided")
         
         # Create new entry
-        new_entry = kamus(
+        new_entry = Kamus(
             word_text=word_text,
             definition=definition,
             image_url_ref=image_url_ref,
@@ -61,7 +61,7 @@ class KamusHandler:
         }
 
     def update_kamus(self, kamus_id: int, word_text: Optional[str] = None, definition: Optional[str] = None, image: Optional[UploadFile] = None, video_url: Optional[str] = None) -> Dict[str, Any]:
-        item = self.db.query(kamus).filter(kamus.id == kamus_id).first()
+        item = self.db.query(Kamus).filter(Kamus.id == kamus_id).first()
         if not item:
             raise HTTPException(status_code=404, detail="Kamus not found")
         
@@ -109,7 +109,7 @@ class KamusHandler:
         }
 
     def get_kamus(self, kamus_id: int) -> Dict[str, Any]:
-        item = self.db.query(kamus).filter(kamus.id == kamus_id).first()
+        item = self.db.query(Kamus).filter(Kamus.id == kamus_id).first()
         if not item:
             raise HTTPException(status_code=404, detail="Kamus not found")
         return {
@@ -126,7 +126,7 @@ class KamusHandler:
         }
 
     def list_kamus(self, skip: int = 0, limit: int = 20) -> Dict[str, Any]:
-        items = self.db.query(kamus).offset(skip).limit(limit).all()
+        items = self.db.query(Kamus).offset(skip).limit(limit).all()
         return {
             "success": True,
             "data": [
@@ -143,7 +143,7 @@ class KamusHandler:
         }
 
     def delete_kamus(self, kamus_id: int) -> Dict[str, Any]:
-        item = self.db.query(kamus).filter(kamus.id == kamus_id).first()
+        item = self.db.query(Kamus).filter(Kamus.id == kamus_id).first()
         if not item:
             raise HTTPException(status_code=404, detail="Kamus not found")
         

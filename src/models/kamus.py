@@ -5,7 +5,7 @@ from sqlalchemy.ext.hybrid import hybrid_property
 import enum
 from ..database.db import Base
 
-class kamus(Base):
+class Kamus(Base):
     __tablename__ = "kamus"
     
     id = Column(Integer, primary_key=True, index=True)

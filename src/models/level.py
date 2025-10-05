@@ -20,6 +20,9 @@ class Level(Base):
         cascade="all, delete-orphan",
         lazy="dynamic"  # For better performance with many sublevels
     )
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     
     # Hybrid property untuk count sublevels
     @hybrid_property

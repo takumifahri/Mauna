@@ -3,6 +3,8 @@ from .auhtRoutes import router as auth_router
 from .badges_routes import router as badge_router
 from .userRoutes import router as user_router
 from .kamusRoutes import router as kamus_router
+from .level import router as level_router
+from .sublevel import router as sublevel_router
 # Buat router utama untuk /api
 api_router = APIRouter(prefix="/api")
 
@@ -11,6 +13,8 @@ api_router.include_router(auth_router)
 api_router.include_router(badge_router)
 api_router.include_router(user_router)
 api_router.include_router(kamus_router)
+api_router.include_router(level_router)
+api_router.include_router(sublevel_router)
 # Testing router untuk debugging dan health checks
 test_router = APIRouter(tags=["Testing"])
 

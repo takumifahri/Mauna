@@ -38,9 +38,31 @@ class User(Base):
         cascade="save-update, merge"  # Tidak auto-delete badges saat user dihapus
     )
     
+    # ✅ Add relationship to Progress
+    progress_list = relationship(
+        "Progress",
+        back_populates="user_ref",
+        cascade="all, delete-orphan",
+        lazy="dynamic"
+    )
+
+    # ✅ Add helper methods
+    def get_sublevel_progress(self, sublevel_id: int):
+        """Get progress for specific sublevel"""
+        return self.progress_list.filter_by(sublevel_id=sublevel_id).first()
+
+    def get_completed_sublevels_count(self):
+        """Get count of completed sublevels"""
+        from .progress import ProgressStatus
+        return self.progress_list.filter_by(status=ProgressStatus.COMPLETED).count()
+    def unlock_next_sublevel(self, current_sublevel_id: int):
+        """Unlock next sublevel after completing current one"""
+        # Implementation for unlocking logic
+        pass
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     last_login = Column(DateTime(timezone=True), nullable=True)
     
     # Properti hybrid untuk menghasilkan unique_id berdasarkan id
