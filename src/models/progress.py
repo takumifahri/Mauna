@@ -171,14 +171,14 @@ class Progress(Base):
     @hybrid_property
     def success_rate(self):
         """Calculate success rate as percentage"""
-        if self.total_questions is 0:
+        if self.total_questions == 0:
             return 0.0
         return (self.correct_answers / self.total_questions) * 100
     
     @hybrid_property
     def is_perfect_score(self) -> bool:
         """Check if user got perfect score (100%)"""
-        return self.completion_percentage is 100
+        return self.completion_percentage == 100
     
     # =====================================================================
     # CLASS METHODS
