@@ -66,6 +66,21 @@ from .sublevel_dto import (
     BulkRestoreRequest as SubLevelBulkRestoreRequest
 )
 
+from .soal_dto import (
+    SoalCreateRequest,
+    SoalUpdateRequest,
+    BulkDeleteSoalRequest,
+    BulkRestoreSoalRequest,
+    SoalData,
+    SoalListData,
+    SoalResponse,
+    SoalListResponse,
+    SoalDeleteResponse,
+    SoalRestoreResponse,
+    SoalStatisticsResponse,
+    AvailableKamusData,
+    AvailableSubLevelData
+)
 __all__ = [
     # Auth DTOs
     "RegisterRequest",
@@ -122,4 +137,19 @@ __all__ = [
     "SubLevelStatisticsResponse",
     "SubLevelBulkDeleteRequest",
     "SubLevelBulkRestoreRequest",
+    
+    # Soal DTOs
+    "SoalCreateRequest",
+    "SoalUpdateRequest",
+    "BulkDeleteSoalRequest",
+    "BulkRestoreSoalRequest",
+    "SoalData",
+    "SoalListData",
+    "SoalResponse",
+    "SoalListResponse",
+    "SoalDeleteResponse",
+    "SoalRestoreResponse",
+    "SoalStatisticsResponse",
+    "AvailableKamusData",
+    "AvailableSubLevelData",
 ]
