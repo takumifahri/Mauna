@@ -4,6 +4,11 @@ from datetime import datetime
 from fastapi import Form, APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 import re
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 BASE_STORAGE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "storage"))
 STORAGE_FOLDERS = {
@@ -13,10 +18,31 @@ STORAGE_FOLDERS = {
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
 
 def ensure_storage_dirs():
-    for folder in STORAGE_FOLDERS.values():
-        os.makedirs(folder, exist_ok=True)
+    """Ensure storage directories exist with proper error handling"""
+    for name, folder in STORAGE_FOLDERS.items():
+        try:
+            os.makedirs(folder, exist_ok=True)
+            logger.info(f"✅ Storage directory created/verified: {folder}")
+        except PermissionError as e:
+            logger.warning(f"⚠️ Permission denied creating {folder}: {e}")
+            # Don't fail the entire application startup
+            continue
+        except Exception as e:
+            logger.error(f"❌ Unexpected error creating {folder}: {e}")
+            continue
 
-ensure_storage_dirs()
+# Only call during actual file operations, not on import
+def _ensure_dir_exists(directory: str):
+    """Ensure specific directory exists when needed"""
+    try:
+        os.makedirs(directory, exist_ok=True)
+        return True
+    except PermissionError:
+        logger.warning(f"Permission denied creating directory: {directory}")
+        return False
+    except Exception as e:
+        logger.error(f"Error creating directory {directory}: {e}")
+        return False
 
 def sanitize_filename(filename: str) -> str:
     """Sanitize filename untuk menghindari karakter yang tidak diizinkan"""
@@ -32,15 +58,15 @@ def sanitize_filename(filename: str) -> str:
 
 def save_image(file: UploadFile, subfolder: str) -> str:
     """Save uploaded image to storage and return relative path"""
-    print(f"🔍 Debug: File received - filename: {file.filename}, content_type: {file.content_type}")
+    logger.info(f"🔍 Debug: File received - filename: {file.filename}, content_type: {file.content_type}")
     
     # Validasi file
     if not file or not file.filename:
-        print("❌ No file provided or filename is empty")
+        logger.error("❌ No file provided or filename is empty")
         return ""
     
     if file.content_type not in ALLOWED_IMAGE_TYPES:
-        print(f"❌ Invalid content type: {file.content_type}")
+        logger.error(f"❌ Invalid content type: {file.content_type}")
         raise HTTPException(status_code=400, detail=f"File must be an image. Allowed types: {ALLOWED_IMAGE_TYPES}")
     
     # Get storage directory
@@ -48,8 +74,9 @@ def save_image(file: UploadFile, subfolder: str) -> str:
     if not storage_dir:
         raise HTTPException(status_code=400, detail="Invalid storage subfolder")
     
-    # Ensure directory exists
-    os.makedirs(storage_dir, exist_ok=True)
+    # Ensure directory exists when needed (not on import)
+    if not _ensure_dir_exists(storage_dir):
+        raise HTTPException(status_code=500, detail=f"Cannot create storage directory: {storage_dir}")
     
     # Generate filename dengan nama asli + timestamp
     original_filename = file.filename
@@ -96,41 +123,59 @@ def save_image(file: UploadFile, subfolder: str) -> str:
         with open(file_path, "wb") as buffer:
             content = file.file.read()
             if not content:
-                print("❌ File content is empty")
+                logger.error("❌ File content is empty")
                 raise HTTPException(status_code=400, detail="File content is empty")
             
             buffer.write(content)
-            print(f"✅ File saved successfully: {file_path}")
-            print(f"📁 File size: {len(content)} bytes")
-            print(f"📝 Original filename: {original_filename}")
-            print(f"🆕 New filename: {unique_filename}")
+            logger.info(f"✅ File saved successfully: {file_path}")
+            logger.info(f"📁 File size: {len(content)} bytes")
+            logger.info(f"📝 Original filename: {original_filename}")
+            logger.info(f"🆕 New filename: {unique_filename}")
         
         # Verify file was actually created
         if not os.path.exists(file_path):
-            print(f"❌ File was not created: {file_path}")
+            logger.error(f"❌ File was not created: {file_path}")
             raise HTTPException(status_code=500, detail="Failed to save file")
         
         # Return relative path
         relative_path = f"storage/{subfolder}/{unique_filename}"
-        print(f"🎯 Returning relative path: {relative_path}")
+        logger.info(f"🎯 Returning relative path: {relative_path}")
         return relative_path
         
     except Exception as e:
-        print(f"❌ Error saving file: {str(e)}")
+        logger.error(f"❌ Error saving file: {str(e)}")
         # Clean up if file was partially created
         if os.path.exists(file_path):
-            os.remove(file_path)
+            try:
+                os.remove(file_path)
+            except:
+                pass
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
 
+# Initialize router
 router = APIRouter(prefix="/file", tags=["File Upload"])
 
 @router.post("/upload/soal-image")
 async def upload_soal_image(file: UploadFile = File(...)):
+    """Upload image for soal"""
     try:
         rel_path = save_image(file, "soal")
-        return JSONResponse({"success": True, "path": rel_path})
+        return JSONResponse({
+            "success": True, 
+            "path": rel_path,
+            "message": "Image uploaded successfully"
+        })
     except HTTPException as e:
-        return JSONResponse({"success": False, "error": e.detail}, status_code=e.status_code)
+        return JSONResponse({
+            "success": False, 
+            "error": e.detail
+        }, status_code=e.status_code)
+    except Exception as e:
+        logger.error(f"Unexpected error in upload_soal_image: {e}")
+        return JSONResponse({
+            "success": False, 
+            "error": "Internal server error"
+        }, status_code=500)
 
 @router.post("/upload/kamus-image")
 async def upload_kamus_image(
@@ -138,8 +183,41 @@ async def upload_kamus_image(
     definition: str = Form(...),
     file: UploadFile = File(...)
 ):
+    """Upload image for kamus entry"""
     try:
         rel_path = save_image(file, "kamus")
-        return JSONResponse({"success": True, "path": rel_path, "word_text": word_text, "definition": definition})
+        return JSONResponse({
+            "success": True, 
+            "path": rel_path, 
+            "word_text": word_text, 
+            "definition": definition,
+            "message": "Kamus image uploaded successfully"
+        })
     except HTTPException as e:
-        return JSONResponse({"success": False, "error": e.detail}, status_code=e.status_code)
+        return JSONResponse({
+            "success": False, 
+            "error": e.detail
+        }, status_code=e.status_code)
+    except Exception as e:
+        logger.error(f"Unexpected error in upload_kamus_image: {e}")
+        return JSONResponse({
+            "success": False, 
+            "error": "Internal server error"
+        }, status_code=500)
+
+@router.get("/init-storage")
+async def initialize_storage():
+    """Manual endpoint to initialize storage directories"""
+    try:
+        ensure_storage_dirs()
+        return JSONResponse({
+            "success": True,
+            "message": "Storage directories initialized",
+            "directories": list(STORAGE_FOLDERS.keys())
+        })
+    except Exception as e:
+        logger.error(f"Error initializing storage: {e}")
+        return JSONResponse({
+            "success": False,
+            "error": str(e)
+        }, status_code=500)
