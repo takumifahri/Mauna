@@ -39,3 +39,4 @@ python-jose[cryptography]
 passlib[bcrypt]
 pydantic[email]
 python-dotenv
+python-multipart
