@@ -264,6 +264,7 @@ class CompleteSeeder(BaseSeeder):
         self.db.commit()
         print(f"✅ SubLevel seeding completed. Created {created_count} sublevels.")
 
+    
     def seed_soal(self):
         """Seed Soal data dengan fixed IDs, dictionary_id, dan sublevel_id"""
         print("❓ Seeding Soal...")
@@ -532,32 +533,32 @@ class CompleteSeeder(BaseSeeder):
                 "video_url": "https://example.com/quiz/tomorrow.mp4"
             },
             
-            # Complex Grammar SubLevel (sublevel_id: 10) - Tanpa kamus reference
+            # Complex Grammar SubLevel (sublevel_id: 10) - Gunakan dictionary_id 1 sebagai default
             {
                 "question": "Bagaimana struktur kalimat tanya dalam bahasa isyarat?",
                 "answer": "Gunakan ekspresi wajah bertanya dan akhiri dengan tanda tanya",
-                "dictionary_id": None,
+                "dictionary_id": 1,  # Default ke dictionary_id 1 (A)
                 "sublevel_id": 10,   # SubLevel: Complex Grammar
                 "video_url": "https://example.com/quiz/question_structure.mp4"
             },
             {
                 "question": "Jelaskan penggunaan ruang dalam bahasa isyarat",
                 "answer": "Ruang digunakan untuk menunjukkan hubungan antara objek dan orang",
-                "dictionary_id": None,
+                "dictionary_id": 1,  # Default ke dictionary_id 1 (A)
                 "sublevel_id": 10,   # SubLevel: Complex Grammar
                 "video_url": "https://example.com/quiz/spatial_grammar.mp4"
             },
             {
                 "question": "Bagaimana cara menggunakan classifier dalam bahasa isyarat?",
                 "answer": "Classifier digunakan untuk menggambarkan bentuk, ukuran, dan gerakan objek",
-                "dictionary_id": None,
+                "dictionary_id": 1,  # Default ke dictionary_id 1 (A)
                 "sublevel_id": 10,   # SubLevel: Complex Grammar
                 "video_url": "https://example.com/quiz/classifiers.mp4"
             },
             {
                 "question": "Jelaskan pentingnya ekspresi wajah dalam bahasa isyarat",
                 "answer": "Ekspresi wajah menunjukkan intonasi, emosi, dan struktur gramatikal",
-                "dictionary_id": None,
+                "dictionary_id": 1,  # Default ke dictionary_id 1 (A)
                 "sublevel_id": 10,   # SubLevel: Complex Grammar
                 "video_url": "https://example.com/quiz/facial_expressions.mp4"
             }
@@ -575,7 +576,7 @@ class CompleteSeeder(BaseSeeder):
                 soal = Soal(**data)
                 self.db.add(soal)
                 created_count += 1
-                print(f"  ✅ Created soal: {data['question'][:50]}... (SubLevel: {data['sublevel_id']})")
+                print(f"  ✅ Created soal: {data['question'][:50]}... (SubLevel: {data['sublevel_id']}, Dict: {data['dictionary_id']})")
             else:
                 print(f"  ⚠️ Soal already exists: {data['question'][:30]}...")
         

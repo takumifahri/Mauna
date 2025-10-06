@@ -22,7 +22,7 @@ class DatabaseConfig:
         self.database_name = os.getenv("DATABASE_NAME", "mauna")
         
         # Debug: Print actual values being used
-        print(f"🔍 Database Config:")
+        print(f"[DEBUG] Database Config:")
         print(f"   Host: {self.hostname}")
         print(f"   Port: {self.port}")
         print(f"   Database: {self.database_name}")
@@ -68,10 +68,10 @@ class DatabaseConfig:
         """Connect to the database."""
         try:
             await self.database.connect()
-            print(f"✅ Database connected: {self.hostname}:{self.port}/{self.database_name}")
+            print(f"[SUCCESS] Database connected: {self.hostname}:{self.port}/{self.database_name}")
         except Exception as e:
-            print(f"❌ Database connection failed: {e}")
-            print(f"🔍 Connection details:")
+            print(f"[ERROR] Database connection failed: {e}")
+            print(f"[DEBUG] Connection details:")
             print(f"   Host: {self.hostname}")
             print(f"   Port: {self.port}")
             print(f"   Database: {self.database_name}")
@@ -82,9 +82,9 @@ class DatabaseConfig:
         """Disconnect from database (async)"""
         try:
             await self.database.disconnect()
-            print("✅ Database disconnected")
+            print("[SUCCESS] Database disconnected")
         except Exception as e:
-            print(f"❌ Error disconnecting database: {e}")
+            print(f"[ERROR] Error disconnecting database: {e}")
             
     async def test_connection(self):
         """Test database connection (async)"""
@@ -93,11 +93,11 @@ class DatabaseConfig:
             query = "SELECT 1"
             result = await self.database.fetch_one(query)
             if result and result[0] == 1:
-                print("✅ Database connection test successful")
+                print("[SUCCESS] Database connection test successful")
             else:
-                print("❌ Database connection test failed")
+                print("[ERROR] Database connection test failed")
         except Exception as e:
-            print(f"❌ Database connection test error: {e}")
+            print(f"[ERROR] Database connection test error: {e}")
         finally:
             await self.database.disconnect()
             
@@ -105,9 +105,9 @@ class DatabaseConfig:
         """Create database tables based on the defined models."""
         try:
             self.Base.metadata.create_all(bind=self.engine)
-            print("✅ Database tables created")
+            print("[SUCCESS] Database tables created")
         except Exception as e:
-            print(f"❌ Error creating database tables: {e}")
+            print(f"[ERROR] Error creating database tables: {e}")
 
 # Create global database instance
 db_config = DatabaseConfig()
