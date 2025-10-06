@@ -20,16 +20,18 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
-# Create app user
-RUN adduser --disabled-password --gecos '' appuser
+# Create app user with specific UID/GID
+RUN groupadd -r appuser && useradd -r -g appuser appuser
 
-# Create storage directories with proper permissions
+# Copy application code first
+COPY . .
+
+# Create storage directories and set proper ownership
 RUN mkdir -p /app/src/storage/kamus /app/src/storage/soal && \
-    chown -R appuser:appuser /app
+    chown -R appuser:appuser /app && \
+    chmod -R 755 /app/src/storage
 
-# Copy application code
-COPY --chown=appuser:appuser . .
-
+# Switch to non-root user
 USER appuser
 
 EXPOSE 8000

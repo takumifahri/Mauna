@@ -5,6 +5,7 @@ from fastapi import Form, APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 import re
 import logging
+from pathlib import Path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -21,38 +22,56 @@ def ensure_storage_dirs():
     """Ensure storage directories exist with proper error handling"""
     for name, folder in STORAGE_FOLDERS.items():
         try:
-            os.makedirs(folder, exist_ok=True)
-            logger.info(f"✅ Storage directory created/verified: {folder}")
+            Path(folder).mkdir(parents=True, exist_ok=True)
+            # Test write permission
+            test_file = Path(folder) / '.write_test'
+            test_file.touch()
+            test_file.unlink()
+            logger.info(f"✅ Storage directory ready: {folder}")
         except PermissionError as e:
-            logger.warning(f"⚠️ Permission denied creating {folder}: {e}")
-            # Don't fail the entire application startup
-            continue
+            logger.warning(f"⚠️ Permission denied for {folder}: {e}")
+            # Try alternative location
+            alt_folder = f"/tmp/mauna_storage/{name}"
+            try:
+                Path(alt_folder).mkdir(parents=True, exist_ok=True)
+                STORAGE_FOLDERS[name] = alt_folder
+                logger.info(f"✅ Using alternative storage: {alt_folder}")
+            except Exception as alt_e:
+                logger.error(f"❌ Failed to create alternative storage: {alt_e}")
         except Exception as e:
             logger.error(f"❌ Unexpected error creating {folder}: {e}")
-            continue
 
-# Only call during actual file operations, not on import
 def _ensure_dir_exists(directory: str):
     """Ensure specific directory exists when needed"""
     try:
-        os.makedirs(directory, exist_ok=True)
+        Path(directory).mkdir(parents=True, exist_ok=True)
+        
+        # Test write permission
+        test_file = Path(directory) / '.write_test'
+        test_file.touch()
+        test_file.unlink()
+        
         return True
-    except PermissionError:
+    except PermissionError as e:
         logger.warning(f"Permission denied creating directory: {directory}")
-        return False
+        
+        # Try alternative location
+        alt_dir = f"/tmp/mauna_storage/{Path(directory).name}"
+        try:
+            Path(alt_dir).mkdir(parents=True, exist_ok=True)
+            logger.info(f"Using alternative directory: {alt_dir}")
+            return alt_dir
+        except Exception:
+            return False
     except Exception as e:
         logger.error(f"Error creating directory {directory}: {e}")
         return False
 
 def sanitize_filename(filename: str) -> str:
     """Sanitize filename untuk menghindari karakter yang tidak diizinkan"""
-    # Hapus karakter yang tidak diizinkan untuk nama file
     filename = re.sub(r'[<>:"/\\|?*]', '', filename)
-    # Ganti spasi dengan underscore
     filename = filename.replace(' ', '_')
-    # Hapus karakter non-ASCII dan ganti dengan underscore
     filename = re.sub(r'[^\w\-_\.]', '_', filename)
-    # Hapus multiple underscore berturut-turut
     filename = re.sub(r'_{2,}', '_', filename)
     return filename
 
@@ -60,7 +79,6 @@ def save_image(file: UploadFile, subfolder: str) -> str:
     """Save uploaded image to storage and return relative path"""
     logger.info(f"🔍 Debug: File received - filename: {file.filename}, content_type: {file.content_type}")
     
-    # Validasi file
     if not file or not file.filename:
         logger.error("❌ No file provided or filename is empty")
         return ""
@@ -74,30 +92,27 @@ def save_image(file: UploadFile, subfolder: str) -> str:
     if not storage_dir:
         raise HTTPException(status_code=400, detail="Invalid storage subfolder")
     
-    # Ensure directory exists when needed (not on import)
-    if not _ensure_dir_exists(storage_dir):
+    # Ensure directory exists - with fallback handling
+    dir_result = _ensure_dir_exists(storage_dir)
+    if dir_result is False:
         raise HTTPException(status_code=500, detail=f"Cannot create storage directory: {storage_dir}")
+    elif isinstance(dir_result, str):
+        # Alternative directory was used
+        storage_dir = dir_result
     
-    # Generate filename dengan nama asli + timestamp
+    # Generate filename
     original_filename = file.filename
     file_extension = os.path.splitext(original_filename)[1].lower()
     filename_without_ext = os.path.splitext(original_filename)[0]
     
-    # Sanitize nama file
     clean_filename = sanitize_filename(filename_without_ext)
-    
-    # Tambahkan timestamp
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    
-    # Format: namafile_asli_YYYYMMDD_HHMMSS.ext
     unique_filename = f"{clean_filename}_{timestamp}{file_extension}"
     
-    # Pastikan extension ada
     if not file_extension:
-        # Fallback extension based on content type
         extension_map = {
             "image/png": ".png",
-            "image/jpeg": ".jpg",
+            "image/jpeg": ".jpg", 
             "image/jpg": ".jpg",
             "image/webp": ".webp"
         }
@@ -106,7 +121,7 @@ def save_image(file: UploadFile, subfolder: str) -> str:
     
     file_path = os.path.join(storage_dir, unique_filename)
     
-    # Check jika file sudah ada (kemungkinan kecil tapi bisa terjadi)
+    # Handle duplicate filenames
     counter = 1
     original_unique_filename = unique_filename
     while os.path.exists(file_path):
@@ -116,7 +131,7 @@ def save_image(file: UploadFile, subfolder: str) -> str:
         counter += 1
     
     try:
-        # Reset file pointer to beginning
+        # Reset file pointer
         file.file.seek(0)
         
         # Read and save file
@@ -129,10 +144,8 @@ def save_image(file: UploadFile, subfolder: str) -> str:
             buffer.write(content)
             logger.info(f"✅ File saved successfully: {file_path}")
             logger.info(f"📁 File size: {len(content)} bytes")
-            logger.info(f"📝 Original filename: {original_filename}")
-            logger.info(f"🆕 New filename: {unique_filename}")
         
-        # Verify file was actually created
+        # Verify file was created
         if not os.path.exists(file_path):
             logger.error(f"❌ File was not created: {file_path}")
             raise HTTPException(status_code=500, detail="Failed to save file")
@@ -142,9 +155,11 @@ def save_image(file: UploadFile, subfolder: str) -> str:
         logger.info(f"🎯 Returning relative path: {relative_path}")
         return relative_path
         
+    except PermissionError as e:
+        logger.error(f"❌ Permission error saving file: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Permission denied: {str(e)}")
     except Exception as e:
         logger.error(f"❌ Error saving file: {str(e)}")
-        # Clean up if file was partially created
         if os.path.exists(file_path):
             try:
                 os.remove(file_path)

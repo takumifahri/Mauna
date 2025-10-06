@@ -31,7 +31,6 @@ services:
     container_name: mauna_app
     restart: unless-stopped
     environment:
-      # 🔧 FIXED: Use explicit values instead of env variables
       - DATABASE_HOSTNAME=postgres
       - DATABASE_PORT=5432
       - DATABASE_NAME=mauna
@@ -46,7 +45,8 @@ services:
       - RATE_LIMIT=3600
       - ALLOWED_ORIGINS=*
     volumes:
-      - ./src/storage:/app/src/storage
+      # Create storage volume instead of bind mount
+      - storage_data:/app/src/storage
     ports:
       - "8888:8000"
     depends_on:
@@ -63,6 +63,8 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  storage_data:  # Add storage volume
     driver: local
 
 networks:
