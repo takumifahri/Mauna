@@ -4,7 +4,10 @@ from sqlalchemy import and_, or_, desc, asc, func
 from fastapi import HTTPException, UploadFile
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
+from functools import lru_cache
+import hashlib
+import json
 
 from ...models.soal import Soal
 from ...models.kamus import Kamus
@@ -16,10 +19,126 @@ from ...dto import (
 )
 
 class SoalHandler:
-    """Handler untuk manajemen soal (Questions Management) - CRUD + Soft Delete + Restore"""
+    """Handler untuk manajemen soal (Questions Management) - CRUD + Soft Delete + Restore + Caching"""
+    
+    # Class-level cache untuk menyimpan hasil query
+    _cache: Dict[str, Dict[str, Any]] = {}
+    _cache_timestamps: Dict[str, datetime] = {}
+    _cache_ttl = 180  # ✅ Cache TTL 3 minutes (180 seconds)
     
     def __init__(self, db: Session):
         self.db = db
+    
+    # =====================================================================
+    # CACHE MANAGEMENT
+    # =====================================================================
+    
+    @classmethod
+    def _generate_cache_key(cls, prefix: str, **kwargs) -> str:
+        """Generate cache key from parameters"""
+        # Sort kwargs untuk konsistensi
+        sorted_params = sorted(kwargs.items())
+        params_str = json.dumps(sorted_params, sort_keys=True)
+        hash_str = hashlib.md5(params_str.encode()).hexdigest()
+        return f"{prefix}:{hash_str}"
+    
+    @classmethod
+    def _get_from_cache(cls, cache_key: str) -> Optional[Dict[str, Any]]:
+        """Get data from cache if valid"""
+        if cache_key not in cls._cache:
+            return None
+        
+        # Check if cache is expired
+        cache_time = cls._cache_timestamps.get(cache_key)
+        if cache_time:
+            age = (datetime.now(timezone.utc) - cache_time).total_seconds()
+            if age > cls._cache_ttl:
+                # Cache expired, remove it
+                cls._cache.pop(cache_key, None)
+                cls._cache_timestamps.pop(cache_key, None)
+                return None
+        
+        return cls._cache.get(cache_key)
+    
+    @classmethod
+    def _set_cache(cls, cache_key: str, data: Dict[str, Any]):
+        """Set data to cache"""
+        cls._cache[cache_key] = data
+        cls._cache_timestamps[cache_key] = datetime.now(timezone.utc)
+    
+    @classmethod
+    def _invalidate_cache(cls, prefix: Optional[str] = None):
+        """Invalidate cache (all or by prefix)"""
+        if prefix:
+            # Remove only keys with specific prefix
+            keys_to_remove = [k for k in cls._cache.keys() if k.startswith(prefix)]
+            for key in keys_to_remove:
+                cls._cache.pop(key, None)
+                cls._cache_timestamps.pop(key, None)
+        else:
+            # Clear all cache
+            cls._cache.clear()
+            cls._cache_timestamps.clear()
+    
+    @classmethod
+    def clear_all_cache(cls):
+        """Manually clear all cache"""
+        cls._invalidate_cache()
+    
+    # =====================================================================
+    # HELPER METHODS FOR TYPE-SAFE CONVERSIONS
+    # =====================================================================
+    
+    @staticmethod
+    def _serialize_datetime(dt: Any) -> Optional[str]:
+        """Convert datetime to ISO format string - type-safe version"""
+        if dt is None:
+            return None
+        # Handle both datetime objects and Column[datetime]
+        if isinstance(dt, datetime):
+            return dt.isoformat()
+        # If it's a Column, try to get the actual value
+        try:
+            if hasattr(dt, '__class__') and 'Column' in str(dt.__class__):
+                return None  # Column without value
+            return str(dt) if dt else None
+        except:
+            return None
+    
+    @staticmethod
+    def _get_int_value(value: Any) -> int:
+        """Safely extract int value from Column or int"""
+        if value is None:
+            return 0
+        if isinstance(value, int):
+            return value
+        # Try to convert to int
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return 0
+    
+    @staticmethod
+    def _get_str_value(value: Any) -> str:
+        """Safely extract string value from Column or str"""
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        try:
+            return str(value)
+        except:
+            return ""
+    
+    @staticmethod
+    def _get_optional_int(value: Any) -> Optional[int]:
+        """Safely extract optional int value"""
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return None
     
     # =====================================================================
     # CREATE - Buat soal baru
@@ -44,11 +163,16 @@ class SoalHandler:
             self.db.commit()
             self.db.refresh(soal)
             
-            # Get detailed data for response - ensure soal.id is properly accessed as integer
-            if soal.id is None:
+            # ✅ Invalidate cache after create
+            self._invalidate_cache("soal_list")
+            self._invalidate_cache("soal_stats")
+            
+            # Get detailed data for response - type-safe
+            soal_id = self._get_int_value(soal.id)
+            if soal_id == 0:
                 raise ValueError("Failed to get soal ID after creation")
                 
-            soal_detail = self._get_soal_detail(soal.id) # type: ignore
+            soal_detail = self._get_soal_detail(soal_id)
             
             return {
                 "success": True,
@@ -70,6 +194,7 @@ class SoalHandler:
                 "message": f"Gagal membuat soal: {str(e)}",
                 "data": None
             }
+    
     # =====================================================================
     # READ - Ambil data soal
     # =====================================================================
@@ -100,18 +225,48 @@ class SoalHandler:
     
     def list_soal(
         self,
-        limit: int = 20,
-        offset: int = 0,
         search: Optional[str] = None,
         sublevel_id: Optional[int] = None,
         level_id: Optional[int] = None,
         dictionary_id: Optional[int] = None,
         include_deleted: bool = False,
         sort_by: str = "created_at",
-        sort_order: str = "desc"
+        sort_order: str = "desc",
+        use_cache: bool = True  # ✅ Cache control
     ) -> Dict[str, Any]:
-        """List soal dengan filtering dan pagination"""
+        """
+        ✅ List ALL soal tanpa pagination dengan caching 3 menit
+        
+        - Cache TTL: 3 menit (180 detik)
+        - Menampilkan semua data sekaligus
+        - Include image_url & video_url dari database
+        """
         try:
+            # ✅ Generate cache key
+            cache_key = self._generate_cache_key(
+                "soal_list",
+                search=search,
+                sublevel_id=sublevel_id,
+                level_id=level_id,
+                dictionary_id=dictionary_id,
+                include_deleted=include_deleted,
+                sort_by=sort_by,
+                sort_order=sort_order
+            )
+            
+            # ✅ Check cache first
+            if use_cache:
+                cached_data = self._get_from_cache(cache_key)
+                if cached_data:
+                    # Mark as cached and return
+                    cached_data["cached"] = True
+                    cache_timestamp = self._cache_timestamps.get(cache_key)
+                    if cache_timestamp:
+                        cached_data["cache_age_seconds"] = int(
+                            (datetime.now(timezone.utc) - cache_timestamp).total_seconds()
+                        )
+                    return cached_data
+            
             # Base query dengan joins
             query = self.db.query(Soal).options(
                 joinedload(Soal.kamus_ref),
@@ -149,26 +304,19 @@ class SoalHandler:
                 order_func = desc if sort_order.lower() == "desc" else asc
                 query = query.order_by(order_func(getattr(Soal, sort_by)))
             
-            # Get total count untuk pagination
-            total = query.count()
-            
-            # Apply pagination
-            soal_list = query.offset(offset).limit(limit).all()
+            # ✅ Get ALL data (no limit)
+            soal_list = query.all()
+            total = len(soal_list)
             
             # Convert ke response format
             soal_data_list = [self._convert_to_list_data(soal) for soal in soal_list]
             
-            return {
+            # Prepare response
+            response = {
                 "success": True,
-                "message": "Daftar soal berhasil diambil",
+                "message": f"Daftar soal berhasil diambil ({total} total)",
                 "data": soal_data_list,
-                "pagination": {
-                    "total": total,
-                    "limit": limit,
-                    "offset": offset,
-                    "pages": (total + limit - 1) // limit if limit > 0 else 1,
-                    "current_page": (offset // limit) + 1 if limit > 0 else 1
-                },
+                "total": total,
                 "filters": {
                     "search": search,
                     "sublevel_id": sublevel_id,
@@ -177,16 +325,25 @@ class SoalHandler:
                     "include_deleted": include_deleted,
                     "sort_by": sort_by,
                     "sort_order": sort_order
-                }
+                },
+                "cached": False,
+                "cache_ttl_seconds": self._cache_ttl
             }
+            
+            # ✅ Store to cache
+            if use_cache:
+                self._set_cache(cache_key, response)
+            
+            return response
             
         except Exception as e:
             return {
                 "success": False,
                 "message": f"Gagal mengambil daftar soal: {str(e)}",
                 "data": [],
-                "pagination": None,
-                "filters": None
+                "total": 0,
+                "filters": None,
+                "cached": False
             }
     
     # =====================================================================
@@ -208,11 +365,15 @@ class SoalHandler:
                     "data": None
                 }
             
-            # Validate foreign keys jika ada perubahan
+            # Validate foreign keys jika ada perubahan - type-safe
             if soal_data.sublevel_id or soal_data.dictionary_id:
-                new_sublevel_id = soal_data.sublevel_id if soal_data.sublevel_id is not None else soal.sublevel_id
-                new_dictionary_id = soal_data.dictionary_id if soal_data.dictionary_id is not None else soal.dictionary_id
-                self._validate_foreign_keys(new_sublevel_id, new_dictionary_id) # pyright: ignore[reportArgumentType]
+                current_sublevel = self._get_int_value(soal.sublevel_id)
+                current_dict = self._get_optional_int(soal.dictionary_id)
+                
+                new_sublevel_id = soal_data.sublevel_id if soal_data.sublevel_id is not None else current_sublevel
+                new_dictionary_id = soal_data.dictionary_id if soal_data.dictionary_id is not None else current_dict
+                
+                self._validate_foreign_keys(new_sublevel_id, new_dictionary_id)
             
             # Update fields yang disediakan
             if soal_data.pertanyaan is not None:
@@ -231,12 +392,16 @@ class SoalHandler:
                 setattr(soal, 'dictionary_id', soal_data.dictionary_id)
             
             # Update timestamp
-            setattr(soal, 'updated_at', datetime.utcnow())
+            setattr(soal, 'updated_at', datetime.now(timezone.utc))
             
             self.db.commit()
             self.db.refresh(soal)
             
-            # Get updated data - use the original soal_id parameter instead of soal.id
+            # ✅ Invalidate cache after update
+            self._invalidate_cache("soal_list")
+            self._invalidate_cache("soal_stats")
+            
+            # Get updated data
             soal_detail = self._get_soal_detail(soal_id)
                 
             return {
@@ -289,11 +454,15 @@ class SoalHandler:
                         "data": None
                     }
                 
-                setattr(soal, 'deleted_at', datetime.utcnow())
+                setattr(soal, 'deleted_at', datetime.now(timezone.utc))
                 message = "Soal berhasil dihapus"
-                deleted_at = soal.deleted_at
+                deleted_at = self._serialize_datetime(soal.deleted_at)
             
             self.db.commit()
+            
+            # ✅ Invalidate cache after delete
+            self._invalidate_cache("soal_list")
+            self._invalidate_cache("soal_stats")
             
             return {
                 "success": True,
@@ -337,11 +506,15 @@ class SoalHandler:
                 else:
                     # Soft delete (hanya jika belum di-delete)
                     if soal.deleted_at is None:
-                        setattr(soal, 'deleted_at', datetime.utcnow())
+                        setattr(soal, 'deleted_at', datetime.now(timezone.utc))
                         deleted_ids.append(soal.id)
                         deleted_count += 1
             
             self.db.commit()
+            
+            # ✅ Invalidate cache after bulk delete
+            self._invalidate_cache("soal_list")
+            self._invalidate_cache("soal_stats")
             
             return {
                 "success": True,
@@ -382,10 +555,14 @@ class SoalHandler:
             
             # Restore soal
             setattr(soal, 'deleted_at', None)
-            setattr(soal, 'updated_at', datetime.utcnow())
+            setattr(soal, 'updated_at', datetime.now(timezone.utc))
             
             self.db.commit()
             self.db.refresh(soal)
+            
+            # ✅ Invalidate cache after restore
+            self._invalidate_cache("soal_list")
+            self._invalidate_cache("soal_stats")
             
             # Get restored data
             soal_detail = self._get_soal_detail(soal_id)
@@ -424,11 +601,15 @@ class SoalHandler:
             
             for soal in soal_list:
                 setattr(soal, 'deleted_at', None)
-                setattr(soal, 'updated_at', datetime.utcnow())
+                setattr(soal, 'updated_at', datetime.now(timezone.utc))
                 restored_ids.append(soal.id)
                 restored_count += 1
                 
             self.db.commit()
+            
+            # ✅ Invalidate cache after bulk restore
+            self._invalidate_cache("soal_list")
+            self._invalidate_cache("soal_stats")
             
             return {
                 "success": True,
@@ -529,8 +710,14 @@ class SoalHandler:
             }
     
     def get_soal_statistics(self) -> Dict[str, Any]:
-        """Get basic statistics untuk dashboard"""
+        """Get basic statistics untuk dashboard dengan caching"""
         try:
+            # ✅ Check cache first
+            cache_key = "soal_stats:summary"
+            cached_data = self._get_from_cache(cache_key)
+            if cached_data:
+                return cached_data
+            
             # Basic counts
             total_soal = self.db.query(Soal).count()
             active_soal = self.db.query(Soal).filter(Soal.deleted_at.is_(None)).count()
@@ -551,7 +738,7 @@ class SoalHandler:
              .group_by(SubLevel.id, SubLevel.name, Level.name)\
              .all()
             
-            return {
+            response = {
                 "success": True,
                 "message": "Statistik berhasil diambil",
                 "data": {
@@ -571,6 +758,11 @@ class SoalHandler:
                     ]
                 }
             }
+            
+            # ✅ Store to cache
+            self._set_cache(cache_key, response)
+            
+            return response
             
         except Exception as e:
             return {
@@ -636,23 +828,124 @@ class SoalHandler:
                     "name": soal.sublevel_ref.level_ref.name
                 } if soal.sublevel_ref.level_ref else None
             } if soal.sublevel_ref else None,
-            "created_at": soal.created_at,
-            "updated_at": soal.updated_at,
-            "deleted_at": soal.deleted_at
+            # Convert datetime to ISO string - actual values from committed record
+            "created_at": self._serialize_datetime(soal.created_at),
+            "updated_at": self._serialize_datetime(soal.updated_at),
+            "deleted_at": self._serialize_datetime(soal.deleted_at)
         }
     
     def _convert_to_list_data(self, soal: Soal) -> Dict[str, Any]:
-        """Convert soal model ke format list data"""
+        """✅ Convert soal model ke format list data dengan image_url & video_url"""
+        # Extract answer value safely and check length
+        answer_value = self._get_str_value(soal.answer)
+        truncated_answer = answer_value[:100] + "..." if len(answer_value) > 100 else answer_value
+        
+        # ✅ Safe extraction untuk image_url & video_url
+        image_url_value = self._get_str_value(soal.image_url) if soal.image_url is not None else None
+        video_url_value = self._get_str_value(soal.video_url) if soal.video_url is not None else None
+        
         return {
             "id": soal.id,
             "pertanyaan": soal.question,
-            "jawaban_benar": soal.answer[:100] + "..." if soal.answer and len(str(soal.answer)) > 100 else soal.answer, # pyright: ignore[reportGeneralTypeIssues]
+            "jawaban_benar": truncated_answer,
             "dictionary_word": soal.kamus_ref.word_text if soal.kamus_ref else None,
             "sublevel_name": soal.sublevel_ref.name if soal.sublevel_ref else None,
             "level_name": soal.sublevel_ref.level_ref.name if soal.sublevel_ref and soal.sublevel_ref.level_ref else None,
-            "has_video": bool(soal.video_url),
-            "has_image": bool(soal.image_url),
-            "created_at": soal.created_at,
-            "updated_at": soal.updated_at,
-            "is_deleted": bool(soal.deleted_at)
+            # ✅ Include actual URLs from database
+            "image_url": image_url_value if image_url_value else None,
+            "video_url": video_url_value if video_url_value else None,
+            # ✅ Keep backward compatibility
+            "has_video": bool(video_url_value),
+            "has_image": bool(image_url_value),
+            # Convert datetime to ISO string - actual values from committed record
+            "created_at": self._serialize_datetime(soal.created_at),
+            "updated_at": self._serialize_datetime(soal.updated_at),
+            "is_deleted": soal.deleted_at is not None
         }
+        
+
+    def update_soal_image(self, soal_id: int, image_url: str) -> Dict[str, Any]:
+        """Update soal image URL"""
+        try:
+            soal = self.db.query(Soal).filter(
+                Soal.id == soal_id,
+                Soal.deleted_at.is_(None)
+            ).first()
+            
+            if not soal:
+                return {
+                    "success": False,
+                    "message": "Soal tidak ditemukan",
+                    "data": None
+                }
+            
+            # Update image_url
+            setattr(soal, 'image_url', image_url)
+            setattr(soal, 'updated_at', datetime.now(timezone.utc))
+            
+            self.db.commit()
+            self.db.refresh(soal)
+            
+            # ✅ Invalidate cache after update
+            self._invalidate_cache("soal_list")
+            self._invalidate_cache("soal_stats")
+            
+            # Get updated data
+            soal_detail = self._get_soal_detail(soal_id)
+            
+            return {
+                "success": True,
+                "message": "Image URL berhasil diupdate",
+                "data": soal_detail
+            }
+            
+        except Exception as e:
+            self.db.rollback()
+            return {
+                "success": False,
+                "message": f"Gagal update image URL: {str(e)}",
+                "data": None
+            }
+    
+    def update_soal_video(self, soal_id: int, video_url: str) -> Dict[str, Any]:
+        """Update soal video URL"""
+        try:
+            soal = self.db.query(Soal).filter(
+                Soal.id == soal_id,
+                Soal.deleted_at.is_(None)
+            ).first()
+            
+            if not soal:
+                return {
+                    "success": False,
+                    "message": "Soal tidak ditemukan",
+                    "data": None
+                }
+            
+            # Update video_url
+            setattr(soal, 'video_url', video_url)
+            setattr(soal, 'updated_at', datetime.now(timezone.utc))
+            
+            self.db.commit()
+            self.db.refresh(soal)
+            
+            # ✅ Invalidate cache after update
+            self._invalidate_cache("soal_list")
+            self._invalidate_cache("soal_stats")
+            
+            # Get updated data
+            soal_detail = self._get_soal_detail(soal_id)
+            
+            return {
+                "success": True,
+                "message": "Video URL berhasil diupdate",
+                "data": soal_detail
+            }
+            
+        except Exception as e:
+            self.db.rollback()
+            return {
+                "success": False,
+                "message": f"Gagal update video URL: {str(e)}",
+                "data": None
+            }

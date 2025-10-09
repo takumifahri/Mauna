@@ -6,7 +6,7 @@ from .kamusRoutes import router as kamus_router
 from .level import router as level_router
 from .sublevel import router as sublevel_router
 from .soalRoutes import router as soal_router
-
+from .exerciseRoutes import router as exercise_router
 # Buat router utama untuk /api
 api_router = APIRouter(prefix="/api")
 
@@ -18,7 +18,7 @@ api_router.include_router(kamus_router)
 api_router.include_router(level_router)
 api_router.include_router(sublevel_router)
 api_router.include_router(soal_router)
-
+api_router.include_router(exercise_router)
 # Testing router untuk debugging dan health checks
 test_router = APIRouter(tags=["Testing"])
 

@@ -62,19 +62,18 @@ async def create_soal(
             },
             status_code=500
         )
-
 @router.post("/upload-image/{soal_id}")
 async def upload_soal_image(
     soal_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    """Upload image for existing soal"""
+    """✅ Upload image for existing soal and save to database"""
     try:
-        # Validate soal exists
         handler = SoalHandler(db)
-        soal_check = handler.get_soal(soal_id)
         
+        # Validate soal exists
+        soal_check = handler.get_soal(soal_id)
         if not soal_check["success"]:
             return JSONResponse(
                 content={
@@ -85,7 +84,7 @@ async def upload_soal_image(
                 status_code=404
             )
         
-        # Save image
+        # Save image file
         image_path = save_image(file, "soal")
         
         if not image_path:
@@ -98,20 +97,18 @@ async def upload_soal_image(
                 status_code=500
             )
         
-        # Update soal dengan image_url (perlu update model Soal untuk support image_url)
-        # Untuk sekarang, return success dengan path
+        # Format image URL
+        image_url = f"/storage/soal/{image_path.split('/')[-1]}"
         
-        return JSONResponse(
-            content={
-                "success": True,
-                "message": "Gambar berhasil diupload",
-                "data": {
-                    "soal_id": soal_id,
-                    "image_path": image_path,
-                    "image_url": f"/storage/soal/{image_path.split('/')[-1]}"
-                }
-            }
-        )
+        # ✅ Update database dengan image_url
+        result = handler.update_soal_image(soal_id, image_url)
+        
+        if result["success"]:
+            # Add file path info to response
+            result["data"]["image_path"] = image_path
+        
+        status_code = 200 if result["success"] else 400
+        return JSONResponse(content=result, status_code=status_code)
         
     except Exception as e:
         logger.error(f"Error uploading soal image: {e}")
@@ -124,14 +121,50 @@ async def upload_soal_image(
             status_code=500
         )
 
+@router.post("/upload-video/{soal_id}")
+async def upload_soal_video(
+    soal_id: int,
+    video_url: str = Form(..., description="Video URL (e.g., YouTube, Vimeo)"),
+    db: Session = Depends(get_db)
+):
+    """✅ Update video URL for existing soal"""
+    try:
+        handler = SoalHandler(db)
+        
+        # Validate soal exists
+        soal_check = handler.get_soal(soal_id)
+        if not soal_check["success"]:
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "message": "Soal tidak ditemukan",
+                    "data": None
+                },
+                status_code=404
+            )
+        
+        # ✅ Update database dengan video_url
+        result = handler.update_soal_video(soal_id, video_url)
+        
+        status_code = 200 if result["success"] else 400
+        return JSONResponse(content=result, status_code=status_code)
+        
+    except Exception as e:
+        logger.error(f"Error updating soal video: {e}")
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": f"Gagal update video: {str(e)}",
+                "data": None
+            },
+            status_code=500
+        )
+
 # =====================================================================
 # READ ENDPOINTS - Mengambil data soal
 # =====================================================================
-
 @router.get("/list", response_model=SoalListResponse)
 async def list_soal(
-    limit: int = Query(20, ge=1, le=100, description="Number of items per page"),
-    offset: int = Query(0, ge=0, description="Number of items to skip"),
     search: Optional[str] = Query(None, description="Search in question or answer"),
     sublevel_id: Optional[int] = Query(None, description="Filter by sublevel ID"),
     level_id: Optional[int] = Query(None, description="Filter by level ID"),
@@ -139,10 +172,16 @@ async def list_soal(
     include_deleted: bool = Query(False, description="Include soft deleted items"),
     sort_by: str = Query("created_at", description="Sort field"),
     sort_order: str = Query("desc", regex="^(asc|desc)$", description="Sort order"),
+    use_cache: bool = Query(True, description="Use cached data"),
     db: Session = Depends(get_db)
 ):
     """
-    List all soal with filtering and pagination
+    ✅ List ALL soal tanpa pagination dengan caching 3 menit
+    
+    **Features:**
+    - No pagination - returns all data
+    - 3 minutes cache (180 seconds)
+    - Includes image_url & video_url from database
     
     **Filters:**
     - **search**: Search in question text or answer
@@ -154,19 +193,21 @@ async def list_soal(
     **Sorting:**
     - **sort_by**: Field to sort by (created_at, updated_at, question, answer)
     - **sort_order**: Sort direction (asc/desc)
+    
+    **Cache:**
+    - **use_cache**: Enable/disable caching (default: true)
     """
     try:
         handler = SoalHandler(db)
         result = handler.list_soal(
-            limit=limit,
-            offset=offset,
             search=search,
             sublevel_id=sublevel_id,
             level_id=level_id,
             dictionary_id=dictionary_id,
             include_deleted=include_deleted,
             sort_by=sort_by,
-            sort_order=sort_order
+            sort_order=sort_order,
+            use_cache=use_cache
         )
         
         status_code = 200 if result["success"] else 400
@@ -179,8 +220,9 @@ async def list_soal(
                 "success": False,
                 "message": f"Internal server error: {str(e)}",
                 "data": [],
-                "pagination": None,
-                "filters": None
+                "total": 0,
+                "filters": None,
+                "cached": False
             },
             status_code=500
         )
@@ -213,7 +255,7 @@ async def get_soal(
 # UPDATE ENDPOINTS - Mengupdate soal
 # =====================================================================
 
-@router.put("/{soal_id}", response_model=SoalResponse)
+@router.patch("/{soal_id}", response_model=SoalResponse)
 async def update_soal(
     soal_id: int,
     soal_data: SoalUpdateRequest,
@@ -448,17 +490,13 @@ async def get_soal_statistics(
 
 @router.get("/deleted/list")
 async def list_deleted_soal(
-    limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0),
     search: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
-    """List only soft deleted soal for restore management"""
+    """✅ List only soft deleted soal for restore management (NO PAGINATION)"""
     try:
         handler = SoalHandler(db)
         result = handler.list_soal(
-            limit=limit,
-            offset=offset,
             search=search,
             include_deleted=True,
             sort_by="deleted_at",
@@ -469,7 +507,7 @@ async def list_deleted_soal(
         if result["success"] and result["data"]:
             deleted_only = [item for item in result["data"] if item["is_deleted"]]
             result["data"] = deleted_only
-            result["pagination"]["total"] = len(deleted_only)
+            result["total"] = len(deleted_only)
         
         status_code = 200 if result["success"] else 400
         return JSONResponse(content=result, status_code=status_code)
@@ -481,12 +519,12 @@ async def list_deleted_soal(
                 "success": False,
                 "message": f"Internal server error: {str(e)}",
                 "data": [],
-                "pagination": None,
+                "total": 0,
                 "filters": None
             },
             status_code=500
         )
-
+        
 @router.post("/create-with-image")
 async def create_soal_with_image(
     pertanyaan: str = Form(...),
@@ -497,7 +535,7 @@ async def create_soal_with_image(
     file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db)
 ):
-    """Create soal with optional image upload in single request"""
+    """✅ Create soal with optional image upload in single request"""
     try:
         # Create soal first
         soal_data = SoalCreateRequest(
@@ -515,18 +553,24 @@ async def create_soal_with_image(
             return JSONResponse(content=result, status_code=400)
         
         # Upload image if provided
-        image_path = None
-        if file:
+        if file and result["data"]:
             try:
+                soal_id = result["data"]["id"]
                 image_path = save_image(file, "soal")
-                # TODO: Update soal dengan image_path di database
+                
+                if image_path:
+                    # Format image URL
+                    image_url = f"/storage/soal/{image_path.split('/')[-1]}"
+                    
+                    # ✅ Update database dengan image_url
+                    update_result = handler.update_soal_image(soal_id, image_url)
+                    
+                    if update_result["success"]:
+                        result["data"] = update_result["data"]
+                        result["message"] += " dengan gambar"
+                    
             except Exception as img_error:
                 logger.warning(f"Failed to upload image for soal: {img_error}")
-        
-        # Add image info to response
-        if image_path and result["data"]:
-            result["data"]["image_url"] = f"/storage/soal/{image_path.split('/')[-1]}"
-            result["message"] += " dengan gambar"
         
         return JSONResponse(content=result, status_code=201)
         
