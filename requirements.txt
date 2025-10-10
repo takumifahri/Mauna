@@ -19,6 +19,7 @@ tensorflow
 opencv-python
 scikit-learn
 Pillow
+numpy
 
 # Environment Variables Management
 python-dotenv

@@ -7,12 +7,12 @@ from .level import router as level_router
 from .sublevel import router as sublevel_router
 from .soalRoutes import router as soal_router
 from .exerciseRoutes import router as exercise_router
-from .predictRoutes import router as predict_router
-# Buat router utama untuk /api
+from .predictRoutes import router as predict_router  # ✅ Import predict router
+
+# ✅ Buat router utama untuk /api (PROTECTED routes)
 api_router = APIRouter(prefix="/api")
 
-# Tambahkan semua sub-router ke api_router
-api_router.include_router(predict_router)
+# ✅ JANGAN include predict_router di sini (akan di-include langsung di main.py)
 api_router.include_router(auth_router)
 api_router.include_router(badge_router)
 api_router.include_router(user_router)
@@ -21,27 +21,38 @@ api_router.include_router(level_router)
 api_router.include_router(sublevel_router)
 api_router.include_router(soal_router)
 api_router.include_router(exercise_router)
-# Testing router untuk debugging dan health checks
+
+# ✅ Testing router
 test_router = APIRouter(tags=["Testing"])
 
 @test_router.get("/")
 async def root():
     """Root endpoint untuk testing"""
     return {
-        "message": "SMT 5 API is running",
+        "message": "Mauna API is running",
         "version": "1.0.0",
         "documentation": "/docs",
-        "status": "healthy"
+        "status": "healthy",
+        "endpoints": {
+            "docs": "/docs",
+            "health": "/health",
+            "public_predict": "/predict/*",
+            "protected_api": "/api/*"
+        }
     }
 
-@test_router.get("/test")
-async def test_endpoint():
-    """Test endpoint untuk memverifikasi API responsiveness"""
+@test_router.get("/health")
+async def health_check():
+    """Health check endpoint"""
     return {
-        "status": "success",
-        "message": "Test endpoint is working properly",
-        "timestamp": "2024-01-01T00:00:00Z"
+        "status": "healthy",
+        "service": "Mauna API",
+        "version": "1.0.0"
     }
 
-# Export semua router yang dibutuhkan
-__all__ = ["api_router", "test_router"]
+# ✅ Export routers
+__all__ = [
+    "api_router",      # Protected routes (/api/*)
+    "test_router",     # Test routes (/)
+    "predict_router"   # ✅ Export predict_router untuk di-include di main.py
+]

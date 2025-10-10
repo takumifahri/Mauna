@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
+import os
 
 class CORSConfig:
     """CORS configuration class"""
@@ -12,19 +13,18 @@ class CORSConfig:
         allow_methods: Optional[List[str]] = None,
         allow_headers: Optional[List[str]] = None
     ):
-        self.origins = origins or [
-            "http://localhost",
-            "http://localhost:8080",
-            "http://localhost:3000",
-            "http://localhost:5173",  # Vite default
-            "http://localhost:4200",  # Angular default
-            "http://127.0.0.1:3000",
-            "http://127.0.0.1:8080",
-        ]
+        # ✅ Default to allow all origins in development
+        environment = os.getenv("ENVIRONMENT", "development")
+        
+        if environment == "production" and origins:
+            self.origins = origins
+        else:
+            # ✅ Allow all origins for development/testing
+            self.origins = ["*"]
         
         self.allow_credentials = allow_credentials
-        self.allow_methods = allow_methods or ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
-        self.allow_headers = allow_headers or ["*"]
+        self.allow_methods = allow_methods or ["*"]  # Allow all methods
+        self.allow_headers = allow_headers or ["*"]   # Allow all headers
     
     def add_to_app(self, app: FastAPI) -> FastAPI:
         """Add CORS middleware to FastAPI app"""
@@ -35,12 +35,12 @@ class CORSConfig:
             allow_methods=self.allow_methods,
             allow_headers=self.allow_headers,
         )
-        print("✅ CORS middleware configured")
+        print(f"✅ CORS middleware configured (origins: {self.origins})")
         return app
     
     def add_origin(self, origin: str):
         """Add new origin to allowed origins"""
-        if origin not in self.origins:
+        if self.origins != ["*"] and origin not in self.origins:
             self.origins.append(origin)
             print(f"✅ Added CORS origin: {origin}")
     
@@ -53,7 +53,7 @@ class CORSConfig:
             "allow_headers": self.allow_headers
         }
 
-# Create global CORS config instance
+# ✅ Create global CORS config instance - Allow all by default
 cors_config = CORSConfig()
 
 # Development CORS (more permissive)
@@ -72,6 +72,6 @@ def get_production_cors(allowed_origins: List[str]) -> CORSConfig:
     return CORSConfig(
         origins=allowed_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
-        allow_headers=["Authorization", "Content-Type"]
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Requested-With"]
     )
