@@ -7,10 +7,12 @@ from .level import router as level_router
 from .sublevel import router as sublevel_router
 from .soalRoutes import router as soal_router
 from .exerciseRoutes import router as exercise_router
+from .predictRoutes import router as predict_router
 # Buat router utama untuk /api
 api_router = APIRouter(prefix="/api")
 
 # Tambahkan semua sub-router ke api_router
+api_router.include_router(predict_router)
 api_router.include_router(auth_router)
 api_router.include_router(badge_router)
 api_router.include_router(user_router)
