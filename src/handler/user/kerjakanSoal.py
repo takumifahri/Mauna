@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from typing import List, Dict, Any, Optional
 from fastapi import HTTPException, status
+from datetime import date, datetime
 
 from src.models.user import User
 from src.models.sublevel import SubLevel
@@ -332,8 +333,134 @@ class SoalHandler:
     
 
   
+    # =====================================================================
+    # 🔥 NEW: DAILY STREAK TRACKING
+    # =====================================================================
+    
+    def update_user_streak(self, user_id: int, activity_date: Optional[date] = None) -> Dict[str, Any]:
+        """
+        Update user streak saat menyelesaikan quiz
+        
+        Args:
+            user_id: User ID
+            activity_date: Tanggal aktivitas (default: today)
+        
+        Returns:
+            Dict dengan info streak update
+        """
+        try:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            
+            if not user:
+                return {
+                    "success": False,
+                    "message": "User not found",
+                    "streak_updated": False
+                }
+            
+            # Set activity date
+            if activity_date is None:
+                activity_date = date.today()
+            
+            # Get previous streak values
+            prev_streak = self.get_int(user.current_streak)
+            prev_longest = self.get_int(user.longest_streak)
+            prev_tier = user.tier.value if user.tier is not None else "bronze"
+            
+            # ✅ Update streak using User model method
+            user.update_streak(activity_date)
+            
+            # Commit changes
+            self.db.commit()
+            self.db.refresh(user)
+            
+            # Get new values
+            new_streak = self.get_int(user.current_streak)
+            new_longest = self.get_int(user.longest_streak)
+            new_tier = user.tier.value if user.tier is not None else "bronze"
+            
+            # Check if streak increased
+            streak_increased = new_streak > prev_streak
+            tier_upgraded = new_tier != prev_tier and new_tier != prev_tier
+            
+            return {
+                "success": True,
+                "streak_updated": True,
+                "previous_streak": prev_streak,
+                "current_streak": new_streak,
+                "longest_streak": new_longest,
+                "streak_increased": streak_increased,
+                "tier": new_tier,
+                "tier_upgraded": tier_upgraded,
+                "last_activity_date": user.last_activity_date.isoformat() if user.last_activity_date is not None else None
+            }
+            
+        except Exception as e:
+            print(f"❌ Error updating user streak: {e}")
+            self.db.rollback()
+            return {
+                "success": False,
+                "message": f"Failed to update streak: {str(e)}",
+                "streak_updated": False
+            }
+    
+    def get_user_streak_info(self, user_id: int) -> Dict[str, Any]:
+        """
+        Get user streak information
+        
+        Returns:
+            Dict dengan informasi streak lengkap
+        """
+        try:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            
+            if not user:
+                return {
+                    "success": False,
+                    "message": "User not found"
+                }
+            
+            current_streak = self.get_int(user.current_streak)
+            longest_streak = self.get_int(user.longest_streak)
+            tier = user.tier.value if user.tier is not None else "bronze"
+            
+            # Get next tier threshold
+            next_threshold = user.get_next_tier_threshold()
+            days_to_next_tier = None
+            if next_threshold:
+                days_to_next_tier = next_threshold - current_streak
+            
+            return {
+                "success": True,
+                "current_streak": current_streak,
+                "longest_streak": longest_streak,
+                "tier": tier,
+                "tier_display": tier.capitalize(),
+                "last_activity_date": user.last_activity_date.isoformat() if user.last_activity_date is not None else None,
+                "streak_freeze_count": self.get_int(user.streak_freeze_count),
+                "next_tier_threshold": next_threshold,
+                "days_to_next_tier": days_to_next_tier,
+                "total_quizzes_completed": self.get_int(user.total_quizzes_completed),
+                "total_xp": self.get_int(user.total_xp)
+            }
+            
+        except Exception as e:
+            print(f"❌ Error getting user streak info: {e}")
+            return {
+                "success": False,
+                "message": f"Failed to get streak info: {str(e)}"
+            }
+    
+    # =====================================================================
+    # 🔥 UPDATED: finish_quiz WITH STREAK TRACKING
+    # =====================================================================
+    
     def finish_quiz(self, user_id: int, sublevel_id: int, quiz_data: FinishQuizRequest) -> QuizResultResponse:
-        """Finish quiz dan update progress - Simplified untuk object detection"""
+        """
+        Finish quiz dan update progress + daily streak
+        
+        ✅ NEW: Automatically updates daily streak saat quiz completed
+        """
         
         if quiz_data.sublevel_id != sublevel_id:
             raise HTTPException(
@@ -360,14 +487,14 @@ class SoalHandler:
             Soal.deleted_at.is_(None)
         ).count()
         
-        # ✅ Simple validation - hanya validate jumlah correct answers
+        # Validate jumlah correct answers
         if quiz_data.correct_answers > total_questions_db:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Jumlah jawaban benar tidak valid. Max: {total_questions_db}, Got: {quiz_data.correct_answers}"
             )
         
-        # ✅ Validate score range
+        # Validate score range
         if quiz_data.total_score < 0 or quiz_data.total_score > 100:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -381,15 +508,23 @@ class SoalHandler:
             score=quiz_data.total_score
         )
         
-        # ✅ Unlock next sublevel or level if completed
+        # ✅ NEW: Update daily streak saat quiz completed
+        streak_info = self.update_user_streak(user_id)
+        
+        # ✅ Increment quiz count
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if user:
+            user.increment_quiz_count()
+        
+        # Unlock next sublevel or level if completed
         next_sublevel_unlocked = False
         if self.get_bool(progress.is_completed):
             next_sublevel_unlocked = self.unlock_next_sublevel(user_id, sublevel_id)
         
         self.db.commit()
         
-        # ✅ Return simple response
-        return QuizResultResponse(
+        # Return response dengan streak info
+        result = QuizResultResponse(
             score=self.get_int(progress.score),
             correct_answers=self.get_int(progress.correct_answers),
             total_questions=self.get_int(progress.total_questions),
@@ -402,6 +537,12 @@ class SoalHandler:
             is_completed=self.get_bool(progress.is_completed),
             next_sublevel_unlocked=next_sublevel_unlocked
         )
+        
+        # ✅ Add streak info to response metadata (optional)
+        print(f"✅ Quiz completed! Streak info: {streak_info}")
+        
+        return result
+    
     def get_sublevel_progress(self, user_id: int, sublevel_id: int) -> SubLevelProgressResponse:
         """Get progress untuk sublevel tertentu"""
         

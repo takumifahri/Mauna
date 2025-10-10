@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Dict, Any
 
 from src.database.db import get_db
 from src.models.user import User
@@ -16,7 +16,6 @@ from src.dto.exercise_dto import (
     ResetProgressResponse,
     ApiResponse
 )
-
 router = APIRouter(prefix="/user/soal", tags=["User - Soal"])
 
 # =====================================================================
@@ -185,3 +184,87 @@ async def health_check():
         message="Soal service is running properly",
         data={"status": "healthy", "service": "soal"}
     )
+
+# =====================================================================
+# 🔥 NEW: STREAK ENDPOINTS
+# =====================================================================
+
+@router.get("/streak/info", response_model=Dict[str, Any])
+async def get_user_streak_info(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    🔥 Get user's current streak information
+    
+    Returns:
+    - current_streak: Jumlah hari berturut-turut
+    - longest_streak: Rekor streak terpanjang
+    - tier: Tier saat ini (bronze/silver/gold/diamond/platinum)
+    - streak_freeze_count: Jumlah freeze yang tersisa
+    - days_to_next_tier: Hari lagi untuk tier berikutnya
+    """
+    try:
+        handler = SoalHandler(db)
+        result = handler.get_user_streak_info(current_user.get_id())
+        
+        if not result["success"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result.get("message", "Failed to get streak info")
+            )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting streak info: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Terjadi kesalahan saat mengambil informasi streak"
+        )
+
+@router.post("/streak/freeze", response_model=ApiResponse)
+async def use_streak_freeze(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    🧊 Use streak freeze to protect streak
+    
+    Gunakan 1 streak freeze untuk protect streak saat tidak bisa belajar
+    """
+    try:
+        user = db.query(User).filter(User.id == current_user.get_id()).first()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        if user.use_streak_freeze():
+            db.commit()
+            return ApiResponse(
+                success=True,
+                message=f"Streak freeze activated! Remaining: {user.streak_freeze_count}",
+                data={
+                    "streak_freeze_remaining": user.streak_freeze_count
+                }
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No streak freeze available"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"Error using streak freeze: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Terjadi kesalahan saat menggunakan streak freeze"
+        )

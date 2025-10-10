@@ -34,6 +34,7 @@ setup_middleware(
     app=app,
     rate_limit=int(os.getenv("RATE_LIMIT", "60")),
     cors_origins=os.getenv("ALLOWED_ORIGINS", "*").split(","),
+    cors_allow_credentials=False,  # ✅ MUST be False when using wildcard
     environment=environment
 )
 
