@@ -32,10 +32,11 @@ from .badges_dto import (
 
 # Kamus DTOs
 from .kamus_dto import (
-    KamusCreateDTO,
-    KamusUpdateDTO,
-    KamusListResponseDTO,
-    KamusResponseDTO,
+    KamusCategoryEnum,
+    KamusCreateRequest,
+    KamusUpdateRequest,
+    KamusResponse,
+    KamusListResponse,
 )
 
 # Level DTOs
@@ -81,6 +82,24 @@ from .soal_dto import (
     AvailableKamusData,
     AvailableSubLevelData
 )
+
+from .exercise_dto import (
+    FinishQuizRequest,
+    ResetProgressRequest,
+    SoalResponse as SoalExerciseResponse,
+    QuizDataResponse,
+    StartQuizResponse,
+    QuizResultResponse,
+    FinishQuizResponse,
+    SubLevelProgressResponse,
+    LevelProgressSummary,
+    UserProgressSummaryResponse,
+    AvailableSubLevelResponse,
+    ResetProgressResponse,
+    ApiResponse,
+    ErrorResponse
+)
+
 __all__ = [
     # Auth DTOs
     "RegisterRequest",
@@ -109,10 +128,11 @@ __all__ = [
     "UserWithBadgesDTO",
     
     # Kamus DTOs
-    "KamusCreateDTO",
-    "KamusUpdateDTO",
-    "KamusListResponseDTO",
-    "KamusResponseDTO",
+    "KamusCategoryEnum",
+    "KamusCreateRequest",
+    "KamusUpdateRequest",
+    "KamusResponse",
+    "KamusListResponse",
     
     # Level DTOs
     "LevelCreateRequest",
@@ -152,4 +172,20 @@ __all__ = [
     "SoalStatisticsResponse",
     "AvailableKamusData",
     "AvailableSubLevelData",
+    
+    # Exercise DTOs
+    "FinishQuizRequest",
+    "ResetProgressRequest",
+        "SoalExerciseResponse",
+        "QuizDataResponse",
+        "StartQuizResponse",
+        "QuizResultResponse",
+        "FinishQuizResponse",
+        "SubLevelProgressResponse",
+        "LevelProgressSummary",
+        "UserProgressSummaryResponse",
+        "AvailableSubLevelResponse",
+        "ResetProgressResponse",
+        "ApiResponse",
+        "ErrorResponse"
 ]

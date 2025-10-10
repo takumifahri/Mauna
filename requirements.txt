@@ -19,6 +19,7 @@ tensorflow
 opencv-python
 scikit-learn
 Pillow
+numpy
 
 # Environment Variables Management
 python-dotenv
@@ -34,8 +35,9 @@ python-dotenv
 asyncpg
 bcrypt
 starlette
-psycopg2
+psycopg2-binary
 python-jose[cryptography]
 passlib[bcrypt]
 pydantic[email]
 python-dotenv
+python-multipart

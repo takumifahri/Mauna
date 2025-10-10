@@ -5,6 +5,7 @@ from databases import Database
 from dotenv import load_dotenv
 from typing import Generator, Optional
 from sqlalchemy.orm import sessionmaker, Session
+
 # Load environment variables from a .env file
 load_dotenv()
 
@@ -20,12 +21,29 @@ class DatabaseConfig:
         self.password = os.getenv("DATABASE_PASSWORD", "postgres")
         self.database_name = os.getenv("DATABASE_NAME", "mauna")
         
+        # Debug: Print actual values being used
+        print(f"[DEBUG] Database Config:")
+        print(f"   Host: {self.hostname}")
+        print(f"   Port: {self.port}")
+        print(f"   Database: {self.database_name}")
+        print(f"   Username: {self.username}")
+        print(f"   Password: {'***' if self.password else 'EMPTY'}")
+        
         # Validate required environment variables
-        if not all([self.hostname, self.port, self.username, self.password, self.database_name]):
+        if not all([self.hostname, self.port, self.username, self.database_name]):
             raise ValueError("Missing required database configuration")
         
-        # Construct database URL
-        self.database_url = f"postgresql://{self.username}:{self.password}@{self.hostname}:{self.port}/{self.database_name}"
+        # Handle empty password case
+        if self.password == "":
+            self.password = None
+            
+        # Construct database URL - handle case where password might be empty
+        if self.password:
+            self.database_url = f"postgresql://{self.username}:{self.password}@{self.hostname}:{self.port}/{self.database_name}"
+        else:
+            self.database_url = f"postgresql://{self.username}@{self.hostname}:{self.port}/{self.database_name}"
+        
+        print(f"   Database URL: postgresql://{self.username}:***@{self.hostname}:{self.port}/{self.database_name}")
         
         # SQLAlchemy setup
         self.engine = create_engine(self.database_url, echo=False)
@@ -36,7 +54,6 @@ class DatabaseConfig:
         self.database = Database(self.database_url)
         self.metadata = MetaData()
         
-    # Kita ambil Datbaase yg diinginkan
     def get_db(self) -> Generator[Session, None, None]:
         """Provide a transactional scope around a series of operations."""
         db: Optional[Session] = None
@@ -51,17 +68,23 @@ class DatabaseConfig:
         """Connect to the database."""
         try:
             await self.database.connect()
-            print(f"✅ Database connected: {self.hostname}:{self.port}/{self.database_name}")
+            print(f"[SUCCESS] Database connected: {self.hostname}:{self.port}/{self.database_name}")
         except Exception as e:
-            print(f"❌ Database connection failed: {e}")
+            print(f"[ERROR] Database connection failed: {e}")
+            print(f"[DEBUG] Connection details:")
+            print(f"   Host: {self.hostname}")
+            print(f"   Port: {self.port}")
+            print(f"   Database: {self.database_name}")
+            print(f"   Username: {self.username}")
             raise
+            
     async def disconnect_db(self):
         """Disconnect from database (async)"""
         try:
             await self.database.disconnect()
-            print("✅ Database disconnected")
+            print("[SUCCESS] Database disconnected")
         except Exception as e:
-            print(f"❌ Error disconnecting database: {e}")
+            print(f"[ERROR] Error disconnecting database: {e}")
             
     async def test_connection(self):
         """Test database connection (async)"""
@@ -70,11 +93,11 @@ class DatabaseConfig:
             query = "SELECT 1"
             result = await self.database.fetch_one(query)
             if result and result[0] == 1:
-                print("✅ Database connection test successful")
+                print("[SUCCESS] Database connection test successful")
             else:
-                print("❌ Database connection test failed")
+                print("[ERROR] Database connection test failed")
         except Exception as e:
-            print(f"❌ Database connection test error: {e}")
+            print(f"[ERROR] Database connection test error: {e}")
         finally:
             await self.database.disconnect()
             
@@ -82,10 +105,9 @@ class DatabaseConfig:
         """Create database tables based on the defined models."""
         try:
             self.Base.metadata.create_all(bind=self.engine)
-            print("✅ Database tables created")
+            print("[SUCCESS] Database tables created")
         except Exception as e:
-            print(f"❌ Error creating database tables: {e}")
-            
+            print(f"[ERROR] Error creating database tables: {e}")
 
 # Create global database instance
 db_config = DatabaseConfig()

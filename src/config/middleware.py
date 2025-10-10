@@ -234,7 +234,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return False
 
 class EnhancedCORSMiddleware(BaseHTTPMiddleware):
-    """Enhanced CORS middleware"""
+    """Enhanced CORS middleware with proper wildcard handling"""
     
     def __init__(
         self, 
@@ -242,15 +242,24 @@ class EnhancedCORSMiddleware(BaseHTTPMiddleware):
         allow_origins: Union[List[str], str] = ["*"],
         allow_methods: List[str] = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
         allow_headers: List[str] = ["*"],
-        allow_credentials: bool = True,
+        allow_credentials: bool = False,  # ✅ Default False when using "*"
         max_age: int = 600,
         expose_headers: Optional[List[str]] = None
     ):
         super().__init__(app)
-        self.allow_origins = allow_origins
+        
+        # ✅ FIX: If origins is "*", credentials MUST be False
+        if (isinstance(allow_origins, str) and allow_origins == "*") or \
+           (isinstance(allow_origins, list) and "*" in allow_origins):
+            self.allow_origins = "*"
+            self.allow_credentials = False  # ✅ Force False with wildcard
+            print("⚠️  CORS: Using wildcard origin (*), credentials disabled")
+        else:
+            self.allow_origins = allow_origins
+            self.allow_credentials = allow_credentials
+        
         self.allow_methods = allow_methods
         self.allow_headers = allow_headers
-        self.allow_credentials = allow_credentials
         self.max_age = max_age
         self.expose_headers = expose_headers or [
             "Content-Length", "Content-Type", "X-Process-Time",
@@ -265,13 +274,16 @@ class EnhancedCORSMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         origin = request.headers.get("Origin")
         
-        if origin and self._is_origin_allowed(origin):
+        # ✅ Handle wildcard origin
+        if self.allow_origins == "*":
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            # ✅ No credentials header with wildcard
+        elif origin and self._is_origin_allowed(origin):
             response.headers["Access-Control-Allow-Origin"] = origin
-            
             if self.allow_credentials:
                 response.headers["Access-Control-Allow-Credentials"] = "true"
-            
-            response.headers["Access-Control-Expose-Headers"] = ", ".join(self.expose_headers)
+        
+        response.headers["Access-Control-Expose-Headers"] = ", ".join(self.expose_headers)
         
         return response
     
@@ -280,39 +292,40 @@ class EnhancedCORSMiddleware(BaseHTTPMiddleware):
         origin = request.headers.get("Origin")
         headers = {}
         
-        if origin and self._is_origin_allowed(origin):
+        # ✅ Handle wildcard origin in preflight
+        if self.allow_origins == "*":
+            headers["Access-Control-Allow-Origin"] = "*"
+            # ✅ No credentials with wildcard
+        elif origin and self._is_origin_allowed(origin):
             headers["Access-Control-Allow-Origin"] = origin
-            
             if self.allow_credentials:
                 headers["Access-Control-Allow-Credentials"] = "true"
-            
-            requested_method = request.headers.get("Access-Control-Request-Method")
-            if requested_method and requested_method in self.allow_methods:
-                headers["Access-Control-Allow-Methods"] = ", ".join(self.allow_methods)
-            
-            requested_headers = request.headers.get("Access-Control-Request-Headers")
-            if requested_headers:
-                if "*" in self.allow_headers:
-                    headers["Access-Control-Allow-Headers"] = requested_headers
-                else:
-                    headers["Access-Control-Allow-Headers"] = ", ".join(self.allow_headers)
-            
-            headers["Access-Control-Max-Age"] = str(self.max_age)
         
-        return JSONResponse(content={}, headers=headers)
+        # Add other CORS headers
+        headers["Access-Control-Allow-Methods"] = ", ".join(self.allow_methods)
+        
+        requested_headers = request.headers.get("Access-Control-Request-Headers")
+        if requested_headers:
+            if "*" in self.allow_headers:
+                headers["Access-Control-Allow-Headers"] = requested_headers
+            else:
+                headers["Access-Control-Allow-Headers"] = ", ".join(self.allow_headers)
+        else:
+            headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, Accept"
+        
+        headers["Access-Control-Max-Age"] = str(self.max_age)
+        
+        return JSONResponse(content={}, headers=headers, status_code=200)
     
     def _is_origin_allowed(self, origin: str) -> bool:
         """Check if origin is allowed"""
-        if isinstance(self.allow_origins, str) and self.allow_origins == "*":
+        if self.allow_origins == "*":
             return True
         
         if isinstance(self.allow_origins, list):
-            if "*" in self.allow_origins:
-                return True
             return origin in self.allow_origins
         
         return False
-
 # =============================================================================
 # AUTH HANDLER & DEPENDENCIES - CENTRALIZED HERE
 # =============================================================================
@@ -478,7 +491,7 @@ def setup_middleware(
     jwt_public_paths: Optional[List[str]] = None,
     rate_limit: int = 60,
     cors_origins: Union[List[str], str] = ["*"],
-    cors_allow_credentials: bool = True,
+    cors_allow_credentials: bool = False,
     environment: str = "development"
 ) -> FastAPI:
     """Setup all middleware easily"""
@@ -486,44 +499,59 @@ def setup_middleware(
     default_public_paths = [
         "/", "/docs", "/redoc", "/openapi.json", "/health",
         "/api/auth/login", "/api/auth/register", "/api/auth/refresh",
-        "/static/.*", "/storage/.*", "/favicon.ico"  # ✅ TAMBAHKAN /storage/.*
+        "/static/.*", "/storage/.*", "/favicon.ico", "/predict/.*", "/api/*", "/*"
     ]
     
-    # Setup CORS
-    if environment == "production":
+    # ✅ SIMPLIFIED CORS - Always allow all origins by default
+    # Hanya gunakan specific origins jika explicitly set di environment
+    
+    # Check if using wildcard origins
+    using_wildcard = (
+        cors_origins == "*" or 
+        cors_origins == ["*"] or 
+        (isinstance(cors_origins, list) and "*" in cors_origins)
+    )
+    
+    if using_wildcard:
+        # ✅ Allow all origins (development & production)
         app.add_middleware(
             EnhancedCORSMiddleware,
-            allow_origins=cors_origins,
-            allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-            allow_headers=["Authorization", "Content-Type", "Accept"],
-            allow_credentials=cors_allow_credentials,
-            max_age=3600
-        )
-        print("✅ Production CORS middleware configured")
-    else:
-        app.add_middleware(
-            EnhancedCORSMiddleware,
-            allow_origins=["*"],
+            allow_origins="*",
             allow_methods=["*"],
             allow_headers=["*"],
-            allow_credentials=True,
+            allow_credentials=False,  # ✅ MUST be False with wildcard
             max_age=600
         )
-        print("✅ Development CORS middleware configured")
+        print(f"✅ CORS configured: Allow all origins (*), no credentials [{environment}]")
+    else:
+        # ✅ Specific origins (when explicitly configured)
+        if isinstance(cors_origins, str):
+            origins_list = [origin.strip() for origin in cors_origins.split(",")]
+        else:
+            origins_list = cors_origins
+        
+        app.add_middleware(
+            EnhancedCORSMiddleware,
+            allow_origins=origins_list,
+            allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
+            allow_credentials=cors_allow_credentials,  # Can be True with specific origins
+            max_age=3600
+        )
+        print(f"✅ CORS configured: Specific origins {origins_list}, credentials={cors_allow_credentials} [{environment}]")
     
     # Setup Rate Limiting
     app.add_middleware(RateLimitMiddleware, rate_limit_per_minute=rate_limit)
-    print(f"✅ Rate limit middleware configured ({rate_limit} requests/minute)")
+    print(f"✅ Rate limit: {rate_limit} requests/minute")
     
     # Setup JWT Authentication
     app.add_middleware(
         JWTAuthMiddleware,
         public_paths=jwt_public_paths or default_public_paths
     )
-    print("✅ JWT authentication middleware configured")
+    print("✅ JWT authentication configured")
     
     return app
-
 # Export semua yang dibutuhkan
 __all__ = [
     "JWTAuthMiddleware",

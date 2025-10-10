@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from ..database import get_db
 from ..config.middleware import get_current_user, auth_manager
-from ..handler.auth.Authhandler import auth_handler  # Keep existing auth_handler
+from ..handler.auth.Authhandler import auth_handler
 from ..dto.auth_dto import (
-    RegisterRequest, LoginRequest, RefreshTokenRequest,
-    AuthResponse, RegisterResponse, ProfileResponse, LogoutResponse, VerifyResponse
+    RegisterRequest, LoginRequest, RefreshTokenRequest, UpdatePasswordRequest,
+    AuthResponse, RegisterResponse, ProfileResponse, LogoutResponse, 
+    VerifyResponse, UpdateProfileResponse
 )
 
 router = APIRouter(
@@ -80,3 +81,69 @@ async def refresh_token(
 ) -> Dict[str, Any]:
     """Refresh access token"""
     return await auth_handler.refresh_token(refresh_data.token, db)
+
+
+@router.patch("/profile", status_code=status.HTTP_200_OK, response_model=UpdateProfileResponse)
+async def update_profile(
+    nama: Optional[str] = Form(None),
+    telpon: Optional[str] = Form(None),
+    bio: Optional[str] = Form(None),
+    username: Optional[str] = Form(None),
+    avatar: Optional[UploadFile] = File(None),  # ✅ Avatar is optional
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Update user profile - all fields optional
+    
+    Can update:
+    - nama: Full name
+    - telpon: Phone number
+    - bio: User biography
+    - username: Username
+    - avatar: Profile picture (image file)
+    
+    Use multipart/form-data to include avatar file
+    """
+    return await auth_handler.update_profile(
+        current_user=current_user,
+        nama=nama,
+        telpon=telpon,
+        bio=bio,
+        username=username,
+        avatar_file=avatar,
+        db=db
+    )
+
+@router.delete("/profile/avatar", status_code=status.HTTP_200_OK, response_model=UpdateProfileResponse)
+async def delete_avatar(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Delete user avatar"""
+    return await auth_handler.delete_avatar(
+        current_user=current_user,
+        db=db
+    )
+
+@router.put("/profile/password", status_code=status.HTTP_200_OK, response_model=UpdateProfileResponse)
+async def change_password(
+    password_data: UpdatePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Change user password
+    
+    Requires:
+    - old_password: Current password
+    - new_password: New password (must meet strength requirements)
+    - confirm_password: Confirm new password
+    """
+    return await auth_handler.change_password(
+        current_user=current_user,
+        old_password=password_data.old_password,
+        new_password=password_data.new_password,
+        confirm_password=password_data.confirm_password,
+        db=db
+    )
