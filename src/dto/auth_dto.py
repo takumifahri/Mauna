@@ -21,6 +21,48 @@ class RegisterRequest(BaseModel):
     password: str = Field(..., min_length=8)
     nama: str = Field(..., min_length=2, max_length=255)
 
+class UpdateProfileRequest(BaseModel):
+    """Update profile request - all fields optional including avatar"""
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        json_schema_extra={
+            "example": {
+                "nama": "John Doe Updated",
+                "telpon": "081234567890",
+                "bio": "Software Developer at XYZ Company",
+                "username": "johndoe_new"
+            }
+        }
+    )
+    
+    nama: Optional[str] = Field(None, min_length=2, max_length=255, description="Full name")
+    telpon: Optional[str] = Field(None, min_length=10, max_length=15, description="Phone number")
+    bio: Optional[str] = Field(None, max_length=500, description="User biography")
+    username: Optional[str] = Field(None, min_length=3, max_length=50, description="Username")
+    # Avatar will be handled as UploadFile in route, not in this DTO
+
+class UpdatePasswordRequest(BaseModel):
+    """Change password request"""
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        json_schema_extra={
+            "example": {
+                "old_password": "OldPassword123",
+                "new_password": "NewPassword123",
+                "confirm_password": "NewPassword123"
+            }
+        }
+    )
+    
+    old_password: str = Field(..., min_length=8, description="Current password")
+    new_password: str = Field(..., min_length=8, description="New password")
+    confirm_password: str = Field(..., min_length=8, description="Confirm new password")
+
+class UpdateProfileResponse(BaseModel):
+    """Profile update response"""
+    success: bool
+    message: str
+    data: dict
 class LoginRequest(BaseModel):
     model_config = ConfigDict(
         str_strip_whitespace=True,

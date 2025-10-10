@@ -32,10 +32,11 @@ from .badges_dto import (
 
 # Kamus DTOs
 from .kamus_dto import (
-    KamusCreateDTO,
-    KamusUpdateDTO,
-    KamusListResponseDTO,
-    KamusResponseDTO,
+    KamusCategoryEnum,
+    KamusCreateRequest,
+    KamusUpdateRequest,
+    KamusResponse,
+    KamusListResponse,
 )
 
 # Level DTOs
@@ -127,10 +128,11 @@ __all__ = [
     "UserWithBadgesDTO",
     
     # Kamus DTOs
-    "KamusCreateDTO",
-    "KamusUpdateDTO",
-    "KamusListResponseDTO",
-    "KamusResponseDTO",
+    "KamusCategoryEnum",
+    "KamusCreateRequest",
+    "KamusUpdateRequest",
+    "KamusResponse",
+    "KamusListResponse",
     
     # Level DTOs
     "LevelCreateRequest",

@@ -12,10 +12,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 BASE_STORAGE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "storage"))
+
 STORAGE_FOLDERS = {
     "soal": os.path.join(BASE_STORAGE_PATH, "soal"),
     "kamus": os.path.join(BASE_STORAGE_PATH, "kamus"),
+    "avatars": os.path.join(BASE_STORAGE_PATH, "avatars"),  # ✅ Add avatars
 }
+
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
 
 def ensure_storage_dirs():
@@ -192,6 +195,28 @@ async def upload_soal_image(file: UploadFile = File(...)):
             "error": "Internal server error"
         }, status_code=500)
 
+@router.post("/upload/avatar")
+async def upload_avatar(file: UploadFile = File(...)):
+    """Upload user avatar"""
+    try:
+        rel_path = save_image(file, "avatars")
+        return JSONResponse({
+            "success": True, 
+            "path": rel_path,
+            "url": f"/{rel_path}",
+            "message": "Avatar uploaded successfully"
+        })
+    except HTTPException as e:
+        return JSONResponse({
+            "success": False, 
+            "error": e.detail
+        }, status_code=e.status_code)
+    except Exception as e:
+        logger.error(f"Unexpected error in upload_avatar: {e}")
+        return JSONResponse({
+            "success": False, 
+            "error": "Internal server error"
+        }, status_code=500)
 @router.post("/upload/kamus-image")
 async def upload_kamus_image(
     word_text: str = Form(...),
