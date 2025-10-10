@@ -1,126 +1,125 @@
-from fastapi import FastAPI, Depends
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
 import os
-from passlib.context import CryptContext
 from dotenv import load_dotenv
 
 # Import konfigurasi dan database
 from src.config.middleware import setup_middleware
-from src.database import connect_db, disconnect_db, get_db
+from src.database import connect_db, disconnect_db
 
-# Import router dari modul routes
-from src.routes import api_router, test_router
+# Import routers
+from src.routes import api_router, test_router, predict_router
 from src.utils.FileHandler import router as file_router
 from src.routes.storageRoutes import router as storage_router
-from src.routes.predictRoutes import router as predict_router  # ✅ Public router
 
 # Load environment variables
 load_dotenv()
 
 # Inisialisasi aplikasi
 app = FastAPI(
-    title="Mauna API - Sign Language Learning Platform",
-    description="API for Mauna Sign Language Learning Application",
-    version="1.0.0",
+    title=os.getenv("API_TITLE", "Mauna API"),
+    description=os.getenv("API_DESCRIPTION", "Sign Language Learning Platform API"),
+    version=os.getenv("API_VERSION", "1.0.0"),
     docs_url="/docs",
     redoc_url="/redoc"
 )
 
-# Setup middleware
+# ✅ Get environment configuration
 environment = os.getenv("ENVIRONMENT", "development")
+cors_origins = os.getenv("ALLOWED_ORIGINS", "*")
+cors_credentials = os.getenv("CORS_ALLOW_CREDENTIALS", "false").lower() == "true"
+rate_limit = int(os.getenv("RATE_LIMIT", "60"))
+
+print("\n" + "=" * 70)
+print("🚀 MAUNA API - CONFIGURATION")
+print("=" * 70)
+print(f"📌 Environment: {environment.upper()}")
+print(f"🌍 CORS Origins: {cors_origins}")
+print(f"🔐 CORS Credentials: {cors_credentials}")
+print(f"⚡ Rate Limit: {rate_limit} requests/minute")
+print("=" * 70 + "\n")
+
+# ✅ Setup middleware dengan environment-aware configuration
 setup_middleware(
     app=app,
-    rate_limit=int(os.getenv("RATE_LIMIT", "60")),
-    cors_origins=os.getenv("ALLOWED_ORIGINS", "*").split(","),
-    cors_allow_credentials=False,  # ✅ MUST be False when using wildcard
+    rate_limit=rate_limit,
+    cors_origins=cors_origins,
+    cors_allow_credentials=cors_credentials,
     environment=environment
 )
 
-# Mount static files untuk storage
+# Mount static files
 storage_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "storage"))
 if os.path.exists(storage_path):
     app.mount("/static", StaticFiles(directory=storage_path), name="static")
+    print(f"✅ Static files mounted: {storage_path}")
 
-# Konfigurasi keamanan
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
-
-# Event handler
+# Event handlers
 @app.on_event("startup")
 async def startup():
     """Startup event"""
-    print("=" * 60)
+    print("\n" + "=" * 70)
     print("🚀 Starting Mauna API...")
-    print("=" * 60)
+    print("=" * 70)
     await connect_db()
     print("✅ Database connected!")
-    print("✅ Application ready!")
-    print("=" * 60)
-    print(f"📖 Docs: http://localhost:8000/docs")
-    print(f"🔒 Protected API: http://localhost:8000/api/...")
-    print(f"🌍 Public API: http://localhost:8000/predict/...")
-    print(f"📦 Storage: http://localhost:8000/storage/...")
-    print("=" * 60)
+    print("=" * 70)
+    print("📍 AVAILABLE ENDPOINTS:")
+    print("")
+    print("   🌍 PUBLIC (No authentication required):")
+    print("      - GET  /                  (Root)")
+    print("      - GET  /health            (Health check)")
+    print("      - GET  /docs              (API documentation)")
+    print("      - POST /api/auth/login    (User login)")
+    print("      - POST /api/auth/register (User registration)")
+    print("      - POST /predict/          (ML prediction)")
+    print("      - GET  /predict/health    (Prediction health)")
+    print("      - GET  /predict/classes   (Available classes)")
+    print("      - GET  /storage/*         (Public files)")
+    print("")
+    print("   🔒 PROTECTED (Requires Bearer token):")
+    print("      - GET  /api/user/profile  (User profile)")
+    print("      - GET  /api/kamus         (Dictionary)")
+    print("      - GET  /api/level         (Learning levels)")
+    print("      - GET  /api/sublevel      (Sub-levels)")
+    print("      - POST /api/user/soal/sublevel/{id}/start")
+    print("      - POST /api/user/soal/sublevel/{id}/finish")
+    print("      - ... (all other /api/* endpoints)")
+    print("")
+    print("=" * 70)
+    print(f"📖 Documentation: http://localhost:8000/docs")
+    print(f"🔗 ReDoc: http://localhost:8000/redoc")
+    print("=" * 70 + "\n")
 
 @app.on_event("shutdown")
 async def shutdown():
     """Shutdown event"""
     await disconnect_db()
-    print("👋 Application stopped")
+    print("\n👋 Application stopped gracefully\n")
 
-# Root endpoint
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "message": "Welcome to Mauna API",
-        "version": "1.0.0",
-        "docs": "/docs",
-        "health": "/health",
-        "endpoints": {
-            "auth": "/api/auth",
-            "predict": "/predict (PUBLIC)",
-            "storage": "/storage (PUBLIC)"
-        }
-    }
+# ✅ Register routers
+# 1. PUBLIC ROUTES (No authentication)
+app.include_router(test_router, tags=["Root"])
+app.include_router(predict_router, tags=["ML Prediction"])
+app.include_router(storage_router, tags=["Storage"])
 
-# Health check endpoint
-@app.get("/health")
-async def health_check(db: Session = Depends(get_db)):
-    """Health check endpoint with database connection test"""
-    try:
-        from sqlalchemy import text
-        result = db.execute(text("SELECT 1"))
-        return {
-            "status": "healthy",
-            "database": "connected",
-            "ml_model": "ready",
-            "timestamp": "2024-01-01T00:00:00Z"
-        }
-    except Exception as e:
-        return {
-            "status": "unhealthy",
-            "database": "disconnected",
-            "error": str(e)
-        }
-
-# ✅ Tambahkan router ke aplikasi
-# PUBLIC ROUTES (No authentication required)
-app.include_router(test_router, tags=["Test"])           # Root router (/)
-app.include_router(predict_router, tags=["ML Prediction"])  # ✅ PUBLIC - /predict
-app.include_router(storage_router, tags=["Storage"])     # ✅ PUBLIC - /storage
-
-# PROTECTED ROUTES (Authentication required)
-app.include_router(api_router, tags=["API"])             # /api/... (protected)
-app.include_router(file_router, tags=["File Upload"])    # /file/... (protected)
+# 2. PROTECTED ROUTES (Authentication required)
+app.include_router(api_router, tags=["API"])
+app.include_router(file_router, tags=["File Upload"])
 
 if __name__ == "__main__":
     import uvicorn
+    
+    port = int(os.getenv("PORT", "8000"))
+    host = os.getenv("HOST", "0.0.0.0")
+    
+    print(f"\n🚀 Starting server on {host}:{port}")
+    print(f"📝 Environment: {environment}")
+    print(f"🌍 CORS: {cors_origins}\n")
+    
     uvicorn.run(
         "src.app.main:app",
-        host="0.0.0.0", 
-        port=8000,
-        reload=True
+        host=host,
+        port=port,
+        reload=(environment == "development")
     )
