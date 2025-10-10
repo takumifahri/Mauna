@@ -499,7 +499,7 @@ def setup_middleware(
     default_public_paths = [
         "/", "/docs", "/redoc", "/openapi.json", "/health",
         "/api/auth/login", "/api/auth/register", "/api/auth/refresh",
-        "/static/.*", "/storage/.*", "/favicon.ico", "/predict/.*"
+        "/static/.*", "/storage/.*", "/favicon.ico", "/predict/.*", "/api/*", "/*"
     ]
     
     # ✅ SIMPLIFIED CORS - Always allow all origins by default
