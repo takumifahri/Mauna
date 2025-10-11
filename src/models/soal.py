@@ -16,7 +16,7 @@ class Soal(Base):
     
     # ✅ Foreign Key ke Kamus (Dictionary)
     dictionary_id = Column(Integer, ForeignKey("kamus.id"), nullable=False)
-    
+    point_gamifikasi = Column(Integer, default=1)  # Points for gamification
     # ✅ Foreign Key ke SubLevel  
     sublevel_id = Column(Integer, ForeignKey("sublevel.id"), nullable=False)
     

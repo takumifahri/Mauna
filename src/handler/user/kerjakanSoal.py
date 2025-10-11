@@ -14,6 +14,8 @@ from src.dto.exercise_dto import (
     SubLevelProgressResponse, AvailableSubLevelResponse,
     FinishQuizRequest
 )
+import random
+import json
 
 class SoalHandler:
     """Handler untuk business logic terkait soal dan quiz"""
@@ -274,8 +276,7 @@ class SoalHandler:
     # =====================================================================
     
     def start_quiz(self, user_id: int, sublevel_id: int) -> QuizDataResponse:
-        """Start quiz untuk sublevel tertentu - Duolingo style with level lock"""
-        
+        """Start quiz untuk sublevel tertentu - 10 soal acak per user per sublevel"""
         # Check if sublevel exists
         sublevel = self.db.query(SubLevel).options(
             joinedload(SubLevel.level_ref)
@@ -300,18 +301,48 @@ class SoalHandler:
         
         # Get or create progress
         progress = Progress.get_or_create(self.db, user_id, sublevel_id)
-        
-        # Get all questions
-        questions = self.get_sublevel_questions(sublevel_id)
-        
-        if not questions:
+
+        # --- NEW: Randomize 10 soal per user per sublevel ---
+        # Simpan soal terpilih di progress (misal field: selected_soal_ids, type: TEXT/JSON)
+        selected_soal_ids = None
+        if hasattr(progress, "selected_soal_ids") and progress.selected_soal_ids:
+            try:
+                selected_soal_ids = json.loads(progress.selected_soal_ids)
+            except Exception:
+                selected_soal_ids = None
+
+        if not selected_soal_ids:
+            # Ambil semua soal di sublevel
+            all_soal = self.db.query(Soal).filter(
+                Soal.sublevel_id == sublevel_id,
+                Soal.deleted_at.is_(None)
+            ).all()
+            if len(all_soal) < 10:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Jumlah soal di sublevel ini kurang dari 10"
+                )
+            # Random 10 soal unik
+            selected_soal = random.sample(all_soal, 10)
+            selected_soal_ids = [soal.id for soal in selected_soal]
+            # Simpan ke progress
+            progress.selected_soal_ids = json.dumps(selected_soal_ids)
+            self.db.commit()
+        else:
+            # Ambil soal sesuai ID yang sudah dipilih
+            selected_soal = self.db.query(Soal).filter(
+                Soal.id.in_(selected_soal_ids),
+                Soal.deleted_at.is_(None)
+            ).all()
+
+        if not selected_soal or len(selected_soal) < 10:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Tidak ada soal ditemukan untuk sublevel ini"
             )
         
         # Convert to response format
-        question_responses = [self.create_soal_response(soal) for soal in questions]
+        question_responses = [self.create_soal_response(soal) for soal in selected_soal]
         
         # Mark progress as started
         progress.start_progress()
@@ -322,7 +353,7 @@ class SoalHandler:
             sublevel_name=self.get_str(sublevel.name),
             sublevel_description=self.get_optional_str(sublevel.description),
             level_name=self.get_str(sublevel.level_ref.name),
-            total_questions=len(questions),
+            total_questions=len(question_responses),
             questions=question_responses,
             progress_status=self.get_str(progress.status.value),
             is_unlocked=self.get_bool(progress.is_unlocked),
@@ -502,11 +533,19 @@ class SoalHandler:
             )
         
         # Update progress
+        # Update progress
         progress.update_completion(
             correct=quiz_data.correct_answers,
             total=total_questions_db,
             score=quiz_data.total_score
         )
+        # Tambah XP ke user
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if user:
+            # Misal: 1 XP per soal yang dijawab, atau sesuai score
+            xp_gained = quiz_data.correct_answers  # atau quiz_data.total_score // 10
+            user.add_xp(xp_gained)
+            user.increment_quiz_count()
         
         # ✅ NEW: Update daily streak saat quiz completed
         streak_info = self.update_user_streak(user_id)

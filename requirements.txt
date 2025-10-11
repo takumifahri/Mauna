@@ -15,7 +15,8 @@ python-jose[cryptography]
 passlib[bcrypt]
 
 # Machine Learning and Image Processing
-tensorflow
+tensorflow==2.19.1
+mediapipe==0.10.7
 opencv-python
 scikit-learn
 Pillow

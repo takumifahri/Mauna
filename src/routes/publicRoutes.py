@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 
+from ..handler.user.leaderBoard import get_leaderboard
+
 from ..database import get_db
 from ..models.badges import Badge
 from ..models.kamus import Kamus
@@ -281,3 +283,11 @@ async def get_public_available_sublevels(
     soal_handler = SoalHandler(db)
     return soal_handler.get_available_sublevels(level_id)
 
+
+@public_router.get("/leaderboard")
+async def get_public_leaderboard(
+    db: Session = Depends(get_db),
+    limit: int = Query(20, ge=1, le=100)
+):
+    """🌍 PUBLIC - Get leaderboard"""
+    return get_leaderboard(db, limit=limit)
