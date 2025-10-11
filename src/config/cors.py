@@ -70,8 +70,8 @@ def get_development_cors() -> CORSConfig:
 def get_production_cors(allowed_origins: List[str]) -> CORSConfig:
     """Get production CORS configuration"""
     return CORSConfig(
-        origins=allowed_origins,
+        origins=["*"],  # Allow all origins in development
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
-        allow_headers=["Authorization", "Content-Type", "X-Requested-With"]
+        allow_methods=["*"],
+        allow_headers=["*"]
     )

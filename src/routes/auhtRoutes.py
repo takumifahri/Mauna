@@ -52,11 +52,38 @@ async def login(
 @router.post("/logout", status_code=status.HTTP_200_OK, response_model=LogoutResponse)
 async def logout(
     request: Request,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
-    """Logout current user"""
-    return await auth_handler.logout(current_user, db)
+    """
+    🔒 Logout user dan revoke JWT token
+    
+    **Protected endpoint** - Requires valid JWT token
+    
+    Token yang di-logout akan di-blacklist dan tidak bisa digunakan lagi.
+    """
+    # ✅ Get token from request state (set by middleware)
+    token = getattr(request.state, "jwt_token", None)
+    
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token not found in request"
+        )
+    
+    return await auth_handler.logout(current_user, token, db)
+
+@router.post("/logout-all", status_code=status.HTTP_200_OK, response_model=LogoutResponse)
+async def logout_all_sessions(
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    🔒 Logout dari semua devices
+    
+    **Protected endpoint** - Requires valid JWT token
+    """
+    return await auth_handler.logout_all_sessions(current_user, db)
 
 @router.get("/profile", status_code=status.HTTP_200_OK, response_model=ProfileResponse)
 async def get_profile(

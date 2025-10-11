@@ -10,6 +10,7 @@ import uuid
 from ...config.hash import hash_password, verify_password
 from ...models.user import User, UserRole
 from ...config.middleware import auth_manager
+from ...models.token_blacklist import TokenBlacklist
 
 load_dotenv()
 
@@ -204,20 +205,116 @@ class AuthHandler:
                 detail=f"Login failed: {str(e)}"
             )
     
-    async def logout(self, current_user: User, db: Session = None) -> Dict[str, Any]:
-        """Logout user"""
+    
+    async def logout(
+        self, 
+        current_user: User, 
+        token: str,  # ✅ Get token from request
+        db: Session = None
+    ) -> Dict[str, Any]:
+        """
+        Logout user and revoke JWT token
+        
+        Args:
+            current_user: Current authenticated user
+            token: JWT token to revoke
+            db: Database session
+        """
         if db is None:
             raise ValueError("Database session is required")
             
         try:
+            # ✅ Decode token to get expiry time
+            payload = self.auth_manager.verify_token(token)
+            exp_timestamp = payload.get("exp")
+            
+            if not exp_timestamp:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid token format"
+                )
+            
+            expires_at = datetime.fromtimestamp(exp_timestamp)
+            
+            # ✅ Check if already blacklisted
+            existing = db.query(TokenBlacklist).filter(
+                TokenBlacklist.token == token
+            ).first()
+            
+            if existing:
+                return {
+                    "success": True,
+                    "message": "Token already revoked",
+                    "data": {
+                        "user_id": current_user.id,
+                        "username": current_user.username,
+                        "revoked_at": existing.revoked_at.isoformat()
+                    }
+                }
+            
+            # ✅ Add token to blacklist
+            blacklist_entry = TokenBlacklist(
+                token=token,
+                user_id=current_user.id,
+                revoked_at=datetime.utcnow(),
+                expires_at=expires_at,
+                reason="logout"
+            )
+            
+            db.add(blacklist_entry)
+            
+            # ✅ Set user inactive (optional)
             setattr(current_user, 'is_active', False)
+            
             db.commit()
             
             return {
                 "success": True,
                 "message": f"User {current_user.username} logged out successfully",
                 "data": {
-                    "detail": "User status set to inactive",
+                    "user_id": current_user.id,
+                    "username": current_user.username,
+                    "token_revoked": True,
+                    "logged_out_at": datetime.utcnow().isoformat(),
+                    "note": "Token has been revoked. Please login again to get a new token."
+                }
+            }
+            
+        except HTTPException:
+            db.rollback()
+            raise
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Logout failed: {str(e)}"
+            )
+    
+    async def logout_all_sessions(
+        self,
+        current_user: User,
+        db: Session = None
+    ) -> Dict[str, Any]:
+        """
+        Logout dari semua devices (revoke semua token user)
+        """
+        if db is None:
+            raise ValueError("Database session is required")
+        
+        try:
+            # ✅ Get all active tokens for this user (yang belum expired)
+            # Ini perlu tracking token di database saat login
+            # Untuk sekarang, kita set user inactive saja
+            
+            setattr(current_user, 'is_active', False)
+            db.commit()
+            
+            return {
+                "success": True,
+                "message": "Logged out from all sessions",
+                "data": {
+                    "user_id": current_user.id,
+                    "username": current_user.username,
                     "logged_out_at": datetime.utcnow().isoformat()
                 }
             }
@@ -226,7 +323,7 @@ class AuthHandler:
             db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Logout failed: {str(e)}"
+                detail=f"Logout all sessions failed: {str(e)}"
             )
     
     async def refresh_token(self, token: str, db: Session = None) -> Dict[str, Any]:

@@ -11,9 +11,9 @@ from ..dto.kamus_dto import (
 )
 
 router = APIRouter(
-    prefix="/admin/kamus",
+    prefix="/kamus",
     tags=["Admin - Kamus Management"],
-    dependencies=[Depends(require_moderator_or_admin)]
+    # dependencies=[Depends(require_moderator_or_admin)]
 )
 
 @router.get("/", response_model=KamusListResponse)
@@ -23,7 +23,7 @@ async def get_all_kamus(
     offset: int = Query(0, ge=0),
     include_deleted: bool = Query(False),
     category: Optional[KamusCategoryEnum] = Query(None, description="Filter by category"),
-    current_user = Depends(require_moderator_or_admin)
+    # current_user = Depends(require_moderator_or_admin)
 ):
     """Get all kamus entries with optional category filter"""
     kamus_manager = Kamus_Management(db)
@@ -38,7 +38,7 @@ async def get_all_kamus(
 @router.get("/statistics")
 async def get_kamus_statistics(
     db: Session = Depends(get_db),
-    current_user = Depends(require_moderator_or_admin)
+    # current_user = Depends(require_moderator_or_admin)
 ):
     """Get kamus statistics by category"""
     kamus_manager = Kamus_Management(db)

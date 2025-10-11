@@ -7,12 +7,13 @@ from .level import router as level_router
 from .sublevel import router as sublevel_router
 from .soalRoutes import router as soal_router
 from .exerciseRoutes import router as exercise_router
-from .predictRoutes import router as predict_router  # ✅ Import predict router
+from .predictRoutes import router as predict_router
+from .publicRoutes import public_router  # ✅ Import public router
 
 # ✅ Buat router utama untuk /api (PROTECTED routes)
 api_router = APIRouter(prefix="/api")
 
-# ✅ JANGAN include predict_router di sini (akan di-include langsung di main.py)
+# Include protected routers
 api_router.include_router(auth_router)
 api_router.include_router(badge_router)
 api_router.include_router(user_router)
@@ -27,32 +28,26 @@ test_router = APIRouter(tags=["Testing"])
 
 @test_router.get("/")
 async def root():
-    """Root endpoint untuk testing"""
     return {
-        "message": "Mauna API is running",
+        "success": True,
+        "message": "Welcome to Mauna API",
         "version": "1.0.0",
-        "documentation": "/docs",
-        "status": "healthy",
-        "endpoints": {
-            "docs": "/docs",
-            "health": "/health",
-            "public_predict": "/predict/*",
-            "protected_api": "/api/*"
-        }
+        "docs": "/docs",
+        "public_endpoints": "/public/*"
     }
 
 @test_router.get("/health")
 async def health_check():
-    """Health check endpoint"""
     return {
+        "success": True,
         "status": "healthy",
-        "service": "Mauna API",
-        "version": "1.0.0"
+        "message": "API is running"
     }
 
 # ✅ Export routers
 __all__ = [
-    "api_router",      # Protected routes (/api/*)
-    "test_router",     # Test routes (/)
-    "predict_router"   # ✅ Export predict_router untuk di-include di main.py
+    "api_router",
+    "test_router",
+    "predict_router",
+    "public_router"  # ✅ Export public router
 ]

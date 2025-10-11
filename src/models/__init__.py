@@ -7,7 +7,7 @@ from .level import Level
 from .sublevel import SubLevel
 from .soal import Soal
 from .progress import Progress, ProgressStatus  # ✅ Add Progress
-
+from .token_blacklist import TokenBlacklist  # ✅ Add TokenBlacklist
 # Export untuk kemudahan import
 __all__ = [
     'user_badge_association',
@@ -19,5 +19,7 @@ __all__ = [
     'SubLevel',
     'Soal',
     'Progress',
-    'ProgressStatus'
+    'ProgressStatus',
+    "TokenBlacklist"
+    
 ]

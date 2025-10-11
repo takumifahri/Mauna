@@ -15,7 +15,7 @@ from ..dto import (
 router = APIRouter(
     prefix="/admin/levels",
     tags=["Admin - Level Management"],
-    dependencies=[Depends(require_moderator_or_admin)],
+    # dependencies=[Depends(require_moderator_or_admin)],
     responses={
         401: {"description": "Unauthorized"},
         403: {"description": "Forbidden - Admin/Moderator Only"},
@@ -233,7 +233,7 @@ async def get_all_levels(
     limit: int = Query(100, ge=1, le=1000, description="Number of items per page"),
     offset: int = Query(0, ge=0, description="Number of items to skip"),
     include_deleted: bool = Query(False, description="Include soft deleted records"),
-    current_user = Depends(require_moderator_or_admin)
+    # current_user = Depends(require_moderator_or_admin)
 ) -> Dict[str, Any]:
     """Get all levels with pagination - Admin/Moderator only"""
     level_manager = Level_Management(db)
@@ -252,7 +252,7 @@ async def search_levels(
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
     include_deleted: bool = Query(False),
-    current_user = Depends(require_moderator_or_admin)
+    # current_user = Depends(require_moderator_or_admin)
 ) -> Dict[str, Any]:
     """Search levels by name, description, or objective - Admin/Moderator only"""
     level_manager = Level_Management(db)
@@ -294,9 +294,9 @@ async def get_level(
     request: Request,
     db: Session = Depends(get_db),
     include_deleted: bool = Query(False),
-    current_user = Depends(require_moderator_or_admin)
+    # current_user = Depends(require_moderator_or_admin)
 ) -> Dict[str, Any]:
-    """Get level by ID - Admin/Moderator only"""
+    """Get level by ID - All user"""
     level_manager = Level_Management(db)
     result = level_manager.get_level(level_id, include_deleted=include_deleted)
     
